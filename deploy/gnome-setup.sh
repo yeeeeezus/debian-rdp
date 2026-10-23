@@ -32,6 +32,12 @@ ln -sf /usr/share/zoneinfo/Asia/Damascus $S/etc/localtime
 echo 'Asia/Damascus' > $S/etc/timezone
 echo 'LANG=en_US.UTF-8' > $S/etc/default/locale
 echo 'en_US.UTF-8 UTF-8' > $S/etc/locale.gen
+# generate the locale (postinst never ran; without it apps fall back to C)
+export LD_LIBRARY_PATH="$S/usr/lib/x86_64-linux-gnu:$S/lib/x86_64-linux-gnu"
+export LD_PRELOAD="$S/usr/lib/x86_64-linux-gnu/fakechroot/libfakechroot.so"
+export FAKECHROOT_EXCLUDE_PATH="/dev:/proc:/sys:/tmp"
+/usr/sbin/chroot "$S" /usr/sbin/locale-gen >/dev/null 2>&1 || echo "WARN: locale-gen failed"
+unset LD_PRELOAD
 touch $S/etc/fstab
 cp -f /etc/resolv.conf $S/etc/resolv.conf
 echo 'debian-pc' > $S/etc/hostname
@@ -115,6 +121,7 @@ user_pref("browser.aboutwelcome.enabled", false);
 EOF
 
 echo "== 7. host-side service scripts =="
+mkdir -p $BASE/bin $BASE/run $BASE/logs
 for f in debian-supervisor debian-status debian-session debian-start debian-stop rdp-keepalive; do
   cp "$DEPLOY/gnome-runtime/$f" $BASE/bin/ && chmod +x $BASE/bin/$f
 done

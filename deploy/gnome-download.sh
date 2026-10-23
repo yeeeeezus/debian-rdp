@@ -28,6 +28,11 @@ apt-get -o Debug::NoLocking=1 \
   update 2>&1 | tail -2
 
 PKGS=(
+  # --- ESSENTIAL base (apt never pulls Essential pkgs into dep chains!) ---
+  base-files base-passwd bash coreutils dash debianutils diffutils dpkg
+  findutils grep gzip hostname login mawk ncurses-base ncurses-bin passwd
+  perl-base procps sed sysvinit-utils tar util-linux mount bsdutils
+  e2fsprogs iproute2 ca-certificates libc-bin
   # --- GNOME 49 session core (the official Debian desktop) ---
   gnome-core gnome-shell gnome-session-bin gnome-settings-daemon
   gnome-control-center gnome-keyring seahorse
