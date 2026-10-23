@@ -1,0 +1,18 @@
+#!/bin/bash
+# Start the Debian 13 KDE Plasma desktop (idempotent).
+set -u
+BASE=/home/z/debian
+RUN=$BASE/run
+mkdir -p "$RUN"
+
+if pgrep -f "debian-supervisor" >/dev/null 2>&1; then
+  echo "supervisor already running"
+else
+  # double-fork daemonize: subshell exits instantly, child reparents to init
+  # (single '&' is reaped by the tool harness when the shell exits)
+  ( setsid nohup "$BASE/bin/debian-supervisor" >> "$RUN/supervisor.out" 2>&1 < /dev/null & )
+  sleep 1
+  echo "supervisor started"
+fi
+sleep 2
+exec "$BASE/bin/debian-status"

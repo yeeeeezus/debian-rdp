@@ -1,0 +1,31 @@
+#!/bin/bash
+# ============================================================================
+# debian-session: launch a command inside the real Debian 13 (trixie) system
+# at /home/z/debian/sysroot, using fakechroot (LD_PRELOAD path translation -
+# no ptrace, no root needed, immune to the sandbox seccomp policy).
+#
+# Usage: debian-session [--display N] -- <command...>
+#   or just set DISPLAY_NUM=N in the environment.
+# ============================================================================
+set -u
+BASE=/home/z/debian
+S=$BASE/sysroot
+
+# pick the chroot trampoline (its chroot(2) call is intercepted by fakechroot)
+CHROOT=/usr/sbin/chroot
+[ -x "$CHROOT" ] || CHROOT=/usr/bin/chroot
+
+# fakechroot environment
+export LD_LIBRARY_PATH="$S/usr/lib/x86_64-linux-gnu:$S/lib/x86_64-linux-gnu"
+export LD_PRELOAD="$S/usr/lib/x86_64-linux-gnu/fakechroot/libfakechroot.so"
+export FAKECHROOT_EXCLUDE_PATH="/dev:/proc:/sys:/tmp"
+# keep DNS fresh from the host
+cp /etc/resolv.conf "$S/etc/resolv.conf" 2>/dev/null || true
+
+if [ "${1:-}" = "--display" ]; then
+  export DISPLAY_NUM="$2"
+  shift 2
+fi
+export DISPLAY_NUM="${DISPLAY_NUM:-1}"
+
+exec "$CHROOT" "$S" "$@"

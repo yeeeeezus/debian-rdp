@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+"""mn wrapper: injects the lxbr custom switch module + sane defaults.
+
+The stock `mn` dies on the missing OVS kernel module; this shim (in
+/usr/local/bin, ahead of /usr/bin) makes a plain `mn --test pingall` work
+with Linux bridges inside the lab namespace.
+"""
+import os
+import sys
+
+LAB = '/usr/local/lib/mininet-lab'
+REAL = '/usr/bin/mn'
+
+args = sys.argv[1:]
+joined = ' '.join(args)
+
+if '--custom' not in joined:
+    args = ['--custom', LAB + '/lxbr.py'] + args
+if not any(a == '--switch' or a.startswith('--switch=') for a in args):
+    args = ['--switch', 'lxbr'] + args
+if not any(a == '--controller' or a.startswith('--controller=') for a in args):
+    args = ['--controller', 'none'] + args
+
+env = dict(os.environ)
+env['PYTHONPATH'] = LAB + ':' + env.get('PYTHONPATH', '')
+os.execve(sys.executable, [sys.executable, REAL] + args, env)

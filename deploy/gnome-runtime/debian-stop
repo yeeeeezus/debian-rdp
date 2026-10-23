@@ -1,0 +1,28 @@
+#!/bin/bash
+# Stop the Debian 13 KDE Plasma desktop completely (supervisor + all).
+set -u
+pkill -f "debian-supervisor" 2>/dev/null
+
+BASE=/home/z/debian
+RUN=$BASE/run
+for f in session ws xvnc; do
+  if [ -f "$RUN/$f.pid" ]; then
+    kill "$(cat "$RUN/$f.pid")" 2>/dev/null
+    rm -f "$RUN/$f.pid"
+  fi
+done
+sleep 1
+
+# targeted clean-up: the fakechroot stack uses plain /usr/... argv paths,
+# which distinguishes it from the legacy XFCE stack (/home/z/rdp/...).
+pkill -f "session-inner" 2>/dev/null
+pkill -f "startplasma" 2>/dev/null
+pkill -f "plasmashell" 2>/dev/null
+pkill -f "kwin_x11" 2>/dev/null
+pkill -f "ksmserver" 2>/dev/null
+pkill -f "kded6" 2>/dev/null
+pkill -f "kglobalaccel" 2>/dev/null
+pkill -f "^/usr/bin/Xtigervnc :1" 2>/dev/null
+pkill -f "websockify --web=/usr/share/novnc" 2>/dev/null
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null
+echo "stopped"

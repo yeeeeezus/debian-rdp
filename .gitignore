@@ -1,0 +1,10 @@
+# public setup repo - keep it token-free and data-free
+*.log
+.DS_Store
+__pycache__/
+*.pyc
+# never stage secrets here (they belong in the PRIVATE rdp-data repo)
+**/tokens.env
+**/vnc-passwd
+**/vnc-credentials.txt
+*.token

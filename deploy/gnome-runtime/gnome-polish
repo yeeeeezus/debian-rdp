@@ -1,0 +1,69 @@
+#!/bin/bash
+# ============================================================================
+# gnome-polish: apply the OFFICIAL Debian GNOME look + VNC performance
+# settings. Runs inside the session (after dbus-run-session) once the shell
+# is on the bus. Idempotent - safe to re-run. Retries until shell is ready.
+# ============================================================================
+export HOME=/home/debian USER=debian
+export PATH=/usr/local/bin:/usr/bin:/bin
+export XDG_RUNTIME_DIR=/run/user/1001
+[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || exit 0
+
+# wait for gnome-shell to be ready (gsettings needs the session bus + dconf)
+for i in $(seq 1 90); do
+  if gsettings get org.gnome.shell favorite-apps >/dev/null 2>&1; then break; fi
+  sleep 2
+done
+
+G() { gsettings set "$@" 2>/dev/null || true; }
+
+# ---------- performance over VNC (official look kept) ----------
+G org.gnome.desktop.interface enable-animations false
+G org.gnome.desktop.session idle-delay 0
+G org.gnome.desktop.screensaver lock-enabled false
+G org.gnome.desktop.screensaver idle-activation-enabled false
+G org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
+G org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'nothing'
+G org.gnome.settings-daemon.plugins.power idle-dim false
+G org.gnome.desktop.notifications show-banners true
+
+# ---------- official Debian wallpaper (desktop-base artwork) ----------
+WP=/usr/share/desktop-base/ceratopsian-theme/wallpaper/contents/images/1920x1080.svg
+[ -f "$WP" ] || WP=/usr/share/desktop-base/homeworld-theme/wallpaper/contents/images/1920x1080.svg
+[ -f "$WP" ] || WP=/usr/share/backgrounds/gnome/adwaita-l.jpg
+G org.gnome.desktop.background picture-uri "file://$WP"
+G org.gnome.desktop.background picture-uri-dark "file://$WP"
+G org.gnome.desktop.background picture-options 'zoom'
+G org.gnome.desktop.background primary-color '#241f31'
+
+# ---------- favorite apps in the dash ----------
+G org.gnome.shell favorite-apps "['firefox-esr.desktop', 'org.gnome.Ptyxis.desktop', 'org.gnome.Nautilus.desktop', 'libreoffice-writer.desktop', 'org.remmina.Remmina.desktop']"
+
+# ---------- desktop icons (DING extension) ----------
+G org.gnome.shell enabled-extensions "['ding@rastersoft.com']"
+G org.gnome.shell disable-user-extensions false
+
+# ---------- top bar: date + weekday (official defaults) ----------
+G org.gnome.desktop.interface clock-show-date true
+G org.gnome.desktop.interface clock-show-weekday true
+G org.gnome.desktop.interface clock-show-seconds false
+G org.gnome.desktop.interface show-battery-percentage false
+
+# ---------- dark style: off = official default light Adwaita ----------
+G org.gnome.desktop.interface color-scheme 'default'
+
+# ---------- save CPU: no tracker indexing ----------
+G org.freedesktop.Tracker3.Miner.Files enable-crawling false
+G org.freedesktop.Tracker3.Miner.Files enable-monitors false
+
+# ---------- touchpad-style tap to click (VNC taps arrive as clicks) ----------
+G org.gnome.desktop.peripherals.mouse tap-to-click true
+
+echo "gnome-polish applied at $(date)"
+
+# ---------- trust desktop launchers (proper names, no warning badges) ----------
+for f in /home/debian/Desktop/*.desktop; do
+  [ -f "$f" ] || continue
+  gio set "$f" metadata::trusted true 2>/dev/null || true
+done
+echo "launchers trusted"

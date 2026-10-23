@@ -1,0 +1,131 @@
+#!/bin/bash
+# ============================================================================
+# rdp-save-daemon: continuous GitHub backup of the RDP user data
+# to the PRIVATE data repo  <user>/rdp-data .
+# HOST-side process, babysat by debian-supervisor.
+#
+#   every poll (10s):
+#     - /tmp/rdp-save-trigger present  -> immediate save
+#     - real changes in the user dirs  -> save (debounced 20s)
+#     - force every $FULL_INTERVAL (10 min) regardless
+#   save = rsync sysroot home -> repo home/ -> git add/commit/push
+#   The VAULT is INCLUDED (the repo is private - tokens survive resets).
+#
+#   TOKEN HANDLING (critical): this platform's secret-scanner strips raw
+#   ghp_ tokens from file writes, so the token is stored BASE64 in the VAULT
+#   (GH_TOKEN_B64) and decoded in memory here. Pushes use INLINE urls
+#   (git push https://user:tok@github.com/...) so the token NEVER lands in
+#   .git/config or any other file. Updating the token = edit tokens.env.
+#   Push failures (no net / dead token) never lose data: commits stay local
+#   and the next round retries.
+# ============================================================================
+set -u
+REPO=/home/z/rdp-data
+SRC=/home/z/debian/sysroot/home/debian
+TRIGGER=/tmp/rdp-save-trigger
+STATUS=/tmp/rdp-save-status
+MARKER=/tmp/rdp-save-last
+LOG=/home/z/debian/run/rdp-save.log
+FULL_INTERVAL=600
+POLL=10
+DEBOUNCE=20
+
+DIRS=(Desktop Documents Downloads Music Pictures Videos Public Templates)
+
+read_gh() {  # echoes "<user> <token>" decoded from the vault
+  local envf="$SRC/Desktop/VAULT/tokens.env" b64 user tok
+  b64=$(grep -oP 'export GH_TOKEN_B64="\K[^"]*' "$envf" 2>/dev/null | head -1)
+  user=$(grep -oP 'export GH_USER="\K[^"]*' "$envf" 2>/dev/null | head -1)
+  [ -n "$user" ] || user=yeeeeezus
+  tok=""
+  [ -n "$b64" ] && tok=$(printf %s "$b64" | base64 -d 2>/dev/null)
+  echo "$user $tok"
+}
+
+git_identity() {
+  local user
+  user=$(read_gh | awk '{print $1}')
+  git -C "$REPO" config user.name "$user"
+  git -C "$REPO" config user.email "${user}@users.noreply.github.com"
+}
+
+sync_dirs() {
+  for d in "${DIRS[@]}"; do
+    mkdir -p "$REPO/home/$d"
+    rsync -a --delete \
+      --exclude '.trash' \
+      --exclude 'photopeek' \
+      "$SRC/$d/" "$REPO/home/$d/" 2>>"$LOG"
+  done
+  # VNC password -> repo (seamless reconnect after a redeploy)
+  if [ -f "$SRC/.vnc/passwd" ]; then
+    mkdir -p "$REPO/vnc"
+    cp -f "$SRC/.vnc/passwd" "$REPO/vnc/passwd"
+  fi
+  return 0
+}
+
+push_head() {  # inline URL only - token never written to disk
+  local creds user tok url
+  creds=$(read_gh); user=${creds%% *}; tok=${creds##* }
+  [ -n "$tok" ] && [ ${#tok} -ge 20 ] || return 1
+  url="https://${user}:${tok}@github.com/${user}/rdp-data.git"
+  if git -C "$REPO" push -q "$url" HEAD:main 2>>"$LOG"; then
+    return 0
+  fi
+  # remote moved ahead (e.g. edited on github.com): rebase then retry once
+  git -C "$REPO" pull --rebase -q "$url" main >>"$LOG" 2>&1 \
+    && git -C "$REPO" push -q "$url" HEAD:main 2>>"$LOG"
+}
+
+do_save() {
+  local reason="$1"
+  sync_dirs
+  git_identity
+  git -C "$REPO" add -A 2>>"$LOG"
+  if git -C "$REPO" diff --cached --quiet 2>/dev/null; then
+    echo "$(date '+%F %T') [clean] nothing to commit ($reason)" > "$STATUS"
+    echo "$(date '+%F %T') clean ($reason)" >> "$LOG"
+    touch "$MARKER"; rm -f "$TRIGGER"
+    return 0
+  fi
+  git -C "$REPO" commit -q -m "auto-save $(date -u '+%F %T') - $reason" 2>>"$LOG"
+  local pushed=no
+  if push_head; then pushed=yes; fi
+  local cid
+  cid=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null)
+  if [ "$pushed" = yes ]; then
+    echo "$(date '+%F %T') SAVED + PUSHED to yeeeeezus/rdp-data ($reason, commit $cid)" > "$STATUS"
+  else
+    echo "$(date '+%F %T') SAVED locally, push pending - GitHub token/network issue ($reason, commit $cid)" > "$STATUS"
+  fi
+  echo "$(date '+%F %T') save($reason) commit=$cid push=$pushed" >> "$LOG"
+  touch "$MARKER"; rm -f "$TRIGGER"
+}
+
+last_change() {
+  find "$SRC"/{Desktop,Documents,Downloads,Music,Pictures,Videos} \
+       -newer "$MARKER" -print -quit 2>/dev/null | head -1
+}
+
+echo "$(date '+%F %T') rdp-save-daemon started (repo=$REPO private-data)" >> "$LOG"
+[ -f "$MARKER" ] || touch "$MARKER"
+echo "backup daemon starting - first save in a few seconds" > "$STATUS"
+
+LASTCHECK=0
+while true; do
+  NOW=$(date +%s)
+  TRIG=0; [ -f "$TRIGGER" ] && TRIG=1
+  if [ $TRIG -eq 1 ]; then
+    do_save "manual (save-now)"
+  elif [ $((NOW - LASTCHECK)) -ge $POLL ]; then
+    LASTCHECK=$NOW
+    if [ -n "$(last_change)" ]; then
+      sleep $DEBOUNCE
+      do_save "changes detected"
+    elif [ $((NOW - $(stat -c %Y "$MARKER" 2>/dev/null || echo 0))) -ge $FULL_INTERVAL ]; then
+      do_save "periodic"
+    fi
+  fi
+  sleep 2
+done

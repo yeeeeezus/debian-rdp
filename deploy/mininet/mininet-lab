@@ -1,0 +1,31 @@
+#!/bin/bash
+# ============================================================================
+# mininet-lab: enter an isolated Mininet SDN lab.
+# Runs inside a private user+network namespace (unshare -Urnm) so the lab
+# has its own "root" with CAP_NET_ADMIN over a fresh network namespace.
+# Linux-bridge switches (lxbr) are the default - see the mn wrapper.
+# ============================================================================
+export HOME=/home/debian
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/usr/sbin
+export TERM=${TERM:-xterm-256color}
+export QT_QUICK_BACKEND=software
+
+echo ""
+echo "  ============================================================"
+echo "   Mininet SDN Lab  -  Debian 13 (trixie)"
+echo "  ============================================================"
+echo ""
+echo "   Isolated user+network namespace, Linux-bridge switches."
+echo "   The desktop and other apps are NOT affected by the lab."
+echo ""
+echo "   Quick start:"
+echo "     mn --test pingall                   minimal topology test"
+echo "     mn --topo tree,depth=2,fanout=4     interactive tree lab"
+echo "     mn --topo linear,4 --test iperf     link bandwidth test"
+echo "     mn --link tc,bw=10,delay=5ms        traffic-shaped links"
+echo "     mn --custom mytopo.py               custom topology"
+echo ""
+echo "   Type 'exit' to leave the lab."
+echo ""
+
+exec unshare -Urnm bash --rcfile /usr/local/lib/mininet-lab/labrc -i

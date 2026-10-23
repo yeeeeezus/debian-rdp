@@ -1,0 +1,121 @@
+#!/bin/bash
+# ============================================================================
+# debian-supervisor: watchdog for the Debian 13 GNOME desktop.
+# Keeps alive:
+#   1. Xtigervnc :1  (VNC on localhost:5901)          [fakechroot]
+#   2. GNOME 48 session on :1                        [fakechroot]
+#   3. websockify + noVNC web client on 0.0.0.0:3000 [fakechroot]
+#   4. rdp-save daemon (continuous GitHub backup)
+# Auto-restarts any component that dies. Before restarting the session it
+# SWEEPS the whole leftover tree (prevents WM-selection races, dbus zombies
+# and process exhaustion that crash-looping sessions used to cause).
+# Launched by debian-start.
+# ============================================================================
+set -u
+BASE=/home/z/debian
+S=$BASE/sysroot
+RUN=$BASE/run
+GEOMETRY="${GEOMETRY:-1600x900}"
+mkdir -p "$RUN"
+
+export LD_LIBRARY_PATH="$S/usr/lib/x86_64-linux-gnu:$S/lib/x86_64-linux-gnu"
+export LD_PRELOAD="$S/usr/lib/x86_64-linux-gnu/fakechroot/libfakechroot.so"
+export FAKECHROOT_EXCLUDE_PATH="/dev:/proc:/sys:/tmp"
+export DISPLAY_NUM=1
+CHROOT=/usr/sbin/chroot
+[ -x "$CHROOT" ] || CHROOT=/usr/bin/chroot
+
+VNC_LOG=$RUN/xvnc.log
+SESS_LOG=$RUN/session.log
+WS_LOG=$RUN/websockify.log
+
+pid_alive() {  # pid_alive <pidfile>
+  [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null
+}
+
+log() { echo "$(date '+%F %T') $*" >> "$RUN/supervisor.log"; }
+
+# kill every process of a dead session tree so nothing orphans
+sweep_session_tree() {
+  local pats=(
+    '/usr/local/bin/session-inner' 'gnome-session-binary' '/usr/bin/gnome-shell'
+    'dbus-run-session' 'gnome-session-failed' 'gsd-' 'gnome-keyring'
+    'mutter' 'xdg-desktop' 'gvfsd' 'evolution' 'goa-daemon' 'at-spi'
+    'localsearch' 'dconf-service' 'gnome-shell-calendar' 'gnome-software'
+    'accounts-daemon' 'colord' 'upowerd'
+  )
+  for p in "${pats[@]}"; do pkill -9 -f "$p" 2>/dev/null; done
+  # session + system dbus of the fakechroot system
+  pkill -9 -f '/usr/bin/dbus-daemon' 2>/dev/null
+  pkill -9 -f 'dbus-daemon --system' 2>/dev/null
+  sleep 1
+}
+
+start_vnc() {
+  # we own every Xvnc in this container: kill untracked leftovers so the
+  # new instance can bind :5901 (an orphan holding the port = restart loop)
+  pkill -9 -f 'Xtigervnc' 2>/dev/null
+  sleep 1
+  rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null
+  cp /etc/resolv.conf "$S/etc/resolv.conf" 2>/dev/null || true
+  "$CHROOT" "$S" /usr/bin/Xtigervnc :1 \
+    -pn -localhost -ac \
+    -rfbauth /home/debian/.vnc/passwd \
+    -geometry "$GEOMETRY" -depth 24 -dpi 96 \
+    >> "$VNC_LOG" 2>&1 &
+  echo $! > "$RUN/xvnc.pid"
+  log "started Xtigervnc :1 pid $(cat "$RUN/xvnc.pid") geometry=$GEOMETRY"
+}
+
+start_session() {
+  sweep_session_tree
+  cp /etc/resolv.conf "$S/etc/resolv.conf" 2>/dev/null || true
+  "$CHROOT" "$S" /usr/local/bin/session-inner >> "$SESS_LOG" 2>&1 &
+  echo $! > "$RUN/session.pid"
+  log "started GNOME session pid $(cat "$RUN/session.pid")"
+}
+
+start_ws() {
+  # same ownership rule for websockify: clear the port before binding
+  pkill -9 -f 'websockify' 2>/dev/null
+  sleep 1
+  "$CHROOT" "$S" /usr/bin/websockify --web=/usr/share/novnc \
+    0.0.0.0:3000 127.0.0.1:5901 >> "$WS_LOG" 2>&1 &
+  echo $! > "$RUN/ws.pid"
+  log "started websockify pid $(cat "$RUN/ws.pid")"
+}
+
+start_save() {
+  if [ -x "$BASE/bin/rdp-save-daemon" ] && ! pgrep -f rdp-save-daemon >/dev/null 2>&1; then
+    ( setsid nohup "$BASE/bin/rdp-save-daemon" >> "$RUN/rdp-save.log" 2>&1 < /dev/null & )
+    log "started rdp-save daemon"
+  fi
+}
+
+# clean stale pidfiles from a previous run
+for f in xvnc session ws; do
+  pid_alive "$RUN/$f.pid" || rm -f "$RUN/$f.pid"
+done
+
+log "supervisor up (geometry=$GEOMETRY, GNOME)"
+
+while true; do
+  # 1. X server (session depends on it - start after)
+  if ! pid_alive "$RUN/xvnc.pid"; then
+    sweep_session_tree
+    start_vnc
+    sleep 3
+    start_session
+  fi
+  # 2. GNOME session (X up but session died -> clean restart)
+  if pid_alive "$RUN/xvnc.pid" && ! pid_alive "$RUN/session.pid"; then
+    start_session
+  fi
+  # 3. websockify / noVNC web client
+  if ! pid_alive "$RUN/ws.pid"; then
+    start_ws
+  fi
+  # 4. continuous backup daemon
+  start_save
+  sleep 5
+done

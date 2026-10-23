@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#101014">
+<title>Debian 13 · Remote Desktop</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #101014;
+    overscroll-behavior: none; touch-action: none;
+    position: fixed; inset: 0;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  #screen { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; background: #101014; }
+  #screen canvas { display: block; }
+
+  /* ---------- connection overlay ---------- */
+  #overlay {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; flex-direction: column; gap: 16px;
+    align-items: center; justify-content: center;
+    background: radial-gradient(1200px 700px at 50% 30%, #1c1c26 0%, #101014 70%);
+    color: #fff; text-align: center; padding: 28px;
+    transition: opacity .4s ease; 
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  .logo {
+    width: 64px; height: 64px; border-radius: 16px;
+    background: linear-gradient(135deg, #d70a53 0%, #fff 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; color: #d70a53; font-size: 26px;
+    box-shadow: 0 10px 40px rgba(215, 10, 83, .35);
+  }
+  #overlay h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  #overlay p { margin: 0; opacity: .65; font-size: 13px; max-width: 440px; line-height: 1.55; }
+  .spinner {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 3px solid rgba(255,255,255,.18); border-top-color: #fff;
+    animation: spin .9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- floating control pill ---------- */
+  #bar {
+    position: fixed; z-index: 40;
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    right: calc(env(safe-area-inset-right, 0px) + 10px);
+    display: flex; gap: 6px;
+    transition: opacity .3s;
+  }
+  #bar.hidden { opacity: 0; pointer-events: none; }
+  #bar button {
+    width: 44px; height: 44px; border-radius: 13px;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(18,18,24,.72);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: manipulation; padding: 0;
+  }
+  #bar button:active { background: rgba(215,10,83,.6); }
+  #bar svg { width: 20px; height: 20px; fill: #fff; pointer-events: none; }
+
+  /* ---------- status pill ---------- */
+  #status {
+    position: fixed; z-index: 40;
+    top: calc(env(safe-area-inset-top, 0px) + 14px); left: 50%;
+    transform: translateX(-50%);
+    background: rgba(18,18,24,.78); color: #eee;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,.12);
+    padding: 6px 14px; border-radius: 999px;
+    font-size: 12px; font-weight: 550; letter-spacing: .2px;
+    opacity: 0; transition: opacity .35s; pointer-events: none;
+    white-space: nowrap; max-width: 86vw; overflow: hidden; text-overflow: ellipsis;
+  }
+  #status.show { opacity: 1; }
+  #status .ok { color: #8ff0a4; }
+  #status .err { color: #ff9c9c; }
+</style>
+</head>
+<body>
+  <div id="screen"></div>
+
+  <div id="bar" class="hidden">
+    <button id="btn-fs" title="Fullscreen" aria-label="Fullscreen">
+      <svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4V4zm16 0v6h-2V6h-4V4h6zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z"/></svg>
+    </button>
+    <button id="btn-kb" title="Keyboard" aria-label="Keyboard">
+      <svg viewBox="0 0 24 24"><path d="M20 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>
+    </button>
+    <button id="btn-rld" title="Reconnect" aria-label="Reconnect">
+      <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+    </button>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="overlay">
+    <div class="logo">D</div>
+    <h1 id="ov-title">Connecting to your Debian desktop…</h1>
+    <p id="ov-text">GNOME 48 on Debian 13 · your work auto-saves to GitHub</p>
+    <div class="spinner"></div>
+  </div>
+
+<script type="module">
+import RFB from './core/rfb.js';
+
+const VNC_PASSWORD = 'trf7-wgrL-Xv1I-LyBH';
+
+const $ = id => document.getElementById(id);
+const screen = $('screen');
+const overlay = $('overlay');
+const ovTitle = $('ov-title');
+const ovText = $('ov-text');
+const bar = $('bar');
+const statusEl = $('status');
+
+let rfb = null;
+let connected = false;
+let retries = 0;
+let statusTimer = null;
+let wakeLock = null;
+
+function showStatus(html, ok) {
+  statusEl.innerHTML = html;
+  statusEl.classList.add('show');
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => statusEl.classList.remove('show'), 4000);
+}
+
+function updateOverlayState() {
+  if (connected) {
+    overlay.classList.add('hidden');
+    bar.classList.remove('hidden');
+  } else {
+    overlay.classList.remove('hidden');
+    $('overlay').querySelector('.spinner').style.display = '';
+  }
+}
+
+function wsURL() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  return proto + '://' + location.host + '/websockify';
+}
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+  } catch (e) { /* not critical */ }
+}
+
+function connect() {
+  ovTitle.textContent = retries === 0
+    ? 'Connecting to your Debian desktop…'
+    : 'Reconnecting… (attempt ' + (retries + 1) + ')';
+  ovText.textContent = 'GNOME 48 on Debian 13 · your work auto-saves to GitHub';
+
+  try { rfb && rfb.disconnect(); } catch (e) {}
+  connected = false;
+
+  rfb = new RFB(screen, wsURL(), {
+    credentials: { password: VNC_PASSWORD },
+    shared: true,
+  });
+
+  /* THE perfect-fit combo:
+     - resizeSession: the Debian desktop resolution FOLLOWS this window 1:1
+       (phones, tablets, any browser size) through RFB SetDesktopSize
+     - scaleViewport: if the server can't resize, scale to fit instead -
+       either way there are NEVER scrollbars */
+  rfb.scaleViewport = true;
+  rfb.resizeSession = true;
+  rfb.background = '#101014';
+  rfb.showLocalCursor = true;
+
+  rfb.addEventListener('connect', () => {
+    connected = true;
+    retries = 0;
+    updateOverlayState();
+    showStatus('<span class="ok">● connected</span> · ' +
+      rfb._fbWidth + '×' + rfb._fbHeight, true);
+    requestWakeLock();
+  });
+
+  rfb.addEventListener('disconnect', e => {
+    connected = false;
+    updateOverlayState();
+    if (e.detail && e.detail.clean) {
+      showStatus('<span class="err">disconnected</span>', false);
+    }
+    /* auto-reconnect with gentle backoff - never leaves the user stranded */
+    const delay = Math.min(1500 * Math.pow(1.6, retries++), 10000);
+    ovText.textContent = 'Reconnecting in ' + Math.round(delay / 1000) + 's…';
+    setTimeout(connect, delay);
+  });
+
+  rfb.addEventListener('securityfailure', () => {
+    ovTitle.textContent = 'Authentication failed';
+    ovText.textContent = 'The VNC password changed - reload the page.';
+  });
+}
+
+/* ---------- controls ---------- */
+$('btn-fs').addEventListener('click', async () => {
+  try {
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      if (screen.orientation && screen.orientation.lock)
+        screen.orientation.lock('landscape').catch(() => {});
+    } else {
+      await document.exitFullscreen();
+    }
+  } catch (e) { /* iOS Safari etc */ }
+});
+
+$('btn-kb').addEventListener('click', () => {
+  try { rfb && rfb.focus({ preventScroll: true }); } catch (e) {}
+  showStatus('keyboard focused - tap the screen to type');
+});
+
+$('btn-rld').addEventListener('click', () => {
+  retries = 0;
+  connect();
+});
+
+/* keep the bar visible while touching, fade while working */
+let barTimer = null;
+function pokeBar() {
+  bar.classList.remove('hidden');
+  clearTimeout(barTimer);
+  barTimer = setTimeout(() => { if (connected) bar.classList.add('hidden'); }, 3500);
+}
+window.addEventListener('pointerdown', pokeBar, { passive: true });
+window.addEventListener('pointermove', pokeBar, { passive: true });
+setTimeout(() => { if (connected) bar.classList.add('hidden'); }, 6000);
+
+/* reconnect when the tab becomes visible again */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    requestWakeLock();
+    if (!connected) { retries = 0; connect(); }
+  }
+});
+
+/* stop mobile browsers from hijacking gestures */
+window.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('gesturestart', e => e.preventDefault());
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
+/* start */
+connect();
+</script>
+</body>
+</html>

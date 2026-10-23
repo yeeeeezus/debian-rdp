@@ -1,0 +1,40 @@
+#!/bin/bash
+# ============================================================================
+# session-inner: GNOME 48 session inside the Debian 13 fakechroot system.
+# Runs on display :${DISPLAY_NUM:-1} (Xtigervnc). Launched by debian-supervisor.
+# systemd is NOT available in this environment -> gnome-session --builtin.
+# ============================================================================
+DN=${DISPLAY_NUM:-1}
+export HOME=/home/debian
+export USER=debian LOGNAME=debian SHELL=/bin/bash
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+export DISPLAY=:$DN
+export LANG=en_US.UTF-8
+export TZ=Asia/Damascus
+export XDG_SESSION_TYPE=x11
+export XDG_CURRENT_DESKTOP=GNOME
+export XDG_SESSION_DESKTOP=gnome
+export XDG_CONFIG_DIRS=/etc/xdg
+export XDG_DATA_DIRS=/usr/local/share:/usr/share
+export XDG_RUNTIME_DIR=/run/user/1001
+
+# --- speed over VNC: software rasterization everywhere, no sandbox ---
+export LIBGL_ALWAYS_SOFTWARE=1
+export GSK_RENDERER=cairo
+export GDK_BACKEND=x11
+export MOZ_DISABLE_CONTENT_SANDBOX=1
+export SAL_USE_VCLPLUGIN=gtk3
+export QT_QPA_PLATFORMTHEME=gtk3
+
+mkdir -p -m 700 "$XDG_RUNTIME_DIR" 2>/dev/null
+
+# wait for the X server socket (shared with the host through /tmp)
+for i in $(seq 1 60); do [ -S /tmp/.X11-unix/X$DN ] && break; sleep 0.5; done
+
+# system dbus: --fork silently dies under fakechroot -> run --nofork in
+# background as a child of this script (dies cleanly with the session).
+mkdir -p /run/dbus 2>/dev/null
+rm -f /run/dbus/pid /run/dbus/system_bus_socket 2>/dev/null
+dbus-daemon --system --nofork >/dev/null 2>&1 &
+
+exec dbus-run-session -- /usr/local/bin/gnome-start

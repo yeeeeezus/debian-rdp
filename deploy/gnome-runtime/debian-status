@@ -1,0 +1,67 @@
+#!/bin/bash
+# Status of the Debian 13 GNOME desktop service + GitHub backup.
+set -u
+BASE=/home/z/debian
+RUN=$BASE/run
+S=$BASE/sysroot
+
+ok()  { echo "OK   $*"; }
+bad() { echo "FAIL $*"; }
+
+pidof_file() { [ -f "$1" ] && cat "$1" 2>/dev/null; }
+
+SUP=$(pgrep -f "debian-supervisor" | head -1)
+[ -n "$SUP" ] && ok "supervisor running (pid $SUP)" || bad "supervisor not running"
+
+for f in xvnc session ws; do
+  P=$(pidof_file "$RUN/$f.pid")
+  if [ -n "$P" ] && kill -0 "$P" 2>/dev/null; then
+    ok "$f alive (pid $P)"
+  else
+    bad "$f not running"
+  fi
+done
+
+# ports
+if ss -tln 2>/dev/null | grep -q '127.0.0.1:5901'; then
+  ok "VNC listening on localhost:5901"
+else
+  bad "VNC not listening on 5901"
+fi
+if ss -tln 2>/dev/null | grep -q '0.0.0.0:3000'; then
+  ok "noVNC/websockify listening on 0.0.0.0:3000"
+else
+  bad "websockify not listening on 3000"
+fi
+if ss -tln 2>/dev/null | grep -q ':81 '; then
+  ok "preview proxy (caddy :81) up"
+else
+  bad "preview proxy :81 down"
+fi
+
+# GNOME session processes (fakechroot argv uses plain /usr paths)
+if pgrep -x gnome-shell >/dev/null; then ok "GNOME Shell running"; else bad "gnome-shell not running"; fi
+GSD=$(pgrep -c -f gsd- 2>/dev/null || echo 0)
+[ "${GSD:-0}" -ge 8 ] && ok "settings daemons ($GSD)" || bad "settings daemons only $GSD"
+if [ -S "$S/run/dbus/system_bus_socket" ]; then ok "system dbus up"; else bad "system dbus down"; fi
+if pgrep -f gnome-session-failed >/dev/null; then bad "session failure dialog present"; fi
+
+# GitHub backup
+if pgrep -f rdp-save-daemon >/dev/null; then
+  ok "backup daemon running"
+  [ -f /tmp/rdp-save-status ] && echo "     last: $(cat /tmp/rdp-save-status | head -1)"
+else
+  bad "backup daemon not running"
+fi
+if [ -d /home/z/rdp-workspace/.git ]; then
+  C=$(git -C /home/z/rdp-workspace log --oneline 2>/dev/null | wc -l)
+  U=$(git -C /home/z/rdp-workspace remote get-url origin >/dev/null 2>&1 && echo yes || echo no)
+  echo "     repo: $C commits, remote configured: $U"
+fi
+
+# system resources
+echo "---"
+echo "sysroot: $(du -sh "$S" 2>/dev/null | cut -f1)   disk free: $(df -h / | awk 'NR==2{print $4}')"
+free -h | awk 'NR==2{print "memory: "$3" used / "$2" total"}'
+echo "preview: https://preview-<bot-id>.space-z.ai/  (proxied :81 -> :3000 -> :5901)"
+[ -f "$BASE/vnc-credentials.txt" ] && echo "vnc password: $(grep -oE '[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}' "$BASE/vnc-credentials.txt" | head -1)"

@@ -1,0 +1,7 @@
+# bash rc for the Mininet lab namespace (real paths inside Debian 13)
+export HOME=/home/debian
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/usr/sbin
+export PS1='\[\e[1;32m\]mn-lab\[\e[0m\]:\w\$ '
+cd /home/debian 2>/dev/null
+alias ll='ls -alF'
+alias ls='ls --color=auto'

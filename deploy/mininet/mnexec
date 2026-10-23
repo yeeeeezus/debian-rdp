@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""mnexec replacement for the userspace Mininet lab.
+
+The stock C mnexec unconditionally runs:
+    mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL)
+("make / rprivate") before doing anything else, which fails with EPERM in
+this container even as root of a user namespace - so every mnexec call
+dies. This drop-in replacement implements the flag subset mininet actually
+uses (verified against mininet/node.py):
+
+    startShell:  mnexec -cdn env PS1=... bash ...     (hosts)
+                 mnexec -cd  env PS1=... bash ...     (switches/ctrl)
+    popen:       mnexec -da <pid>                     (run in host ns)
+    monitor:     mnexec -p <cmd>                      (report pid)
+    cgroup host: mnexec -g <name> -da <pid>           (cgroups N/A here)
+
+Flag semantics (upstream-compatible):
+  -a PID   attach to the network namespace of process PID (setns)
+  -n       run in a new network namespace (unshare CLONE_NEWNET)
+  -c       close descriptors  (redundant with python close_fds -> no-op)
+  -d       detach from tty (setsid)
+  -p       print the pid of the new process
+  -g NAME  cgroup (unavailable in this container -> arg consumed, no-op)
+  -r/-k/-s accepted, no-op
+"""
+import ctypes
+import getopt
+import os
+import sys
+
+CLONE_NEWNET = 0x40000000
+libc = ctypes.CDLL("libc.so.6", use_errno=True)
+
+
+def setns(pid):
+    path = f"/proc/{pid}/ns/net"
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        if libc.setns(fd, 0) != 0:
+            err = ctypes.get_errno()
+            print(f"mnexec: setns({path}): {os.strerror(err)}", file=sys.stderr)
+            sys.exit(1)
+    finally:
+        os.close(fd)
+
+
+def main():
+    argv = sys.argv[1:]
+    attach_pid = None
+    do_setsid = False
+    print_pid = False
+    do_unshare = False
+
+    try:
+        opts, cmd = getopt.getopt(argv, "a:cdg:knprs", [])
+    except getopt.GetoptError as e:
+        print(f"mnexec: {e}", file=sys.stderr)
+        sys.exit(2)
+
+    for o, val in opts:
+        if o == '-a':
+            attach_pid = int(val)
+        elif o == '-d':
+            do_setsid = True
+        elif o == '-p':
+            print_pid = True
+        elif o == '-n':
+            do_unshare = True
+        # -c (fd close), -g (cgroup), -r, -k, -s: accepted, no-op
+
+    if attach_pid is not None:
+        setns(attach_pid)
+    if do_unshare:
+        if libc.unshare(CLONE_NEWNET) != 0:
+            err = ctypes.get_errno()
+            print(f"mnexec: unshare(CLONE_NEWNET): {os.strerror(err)}",
+                  file=sys.stderr)
+            sys.exit(1)
+    if do_setsid:
+        try:
+            os.setsid()
+        except OSError:
+            pass  # already a group leader - fine
+
+    if not cmd:
+        sys.exit(0)
+
+    if print_pid:
+        print(os.getpid(), flush=True)
+
+    try:
+        os.execvp(cmd[0], cmd)
+    except FileNotFoundError:
+        print(f"mnexec: {cmd[0]}: command not found", file=sys.stderr)
+        sys.exit(127)
+
+
+if __name__ == '__main__':
+    main()

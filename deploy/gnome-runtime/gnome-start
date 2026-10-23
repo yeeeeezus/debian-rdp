@@ -1,0 +1,15 @@
+#!/bin/bash
+# ============================================================================
+# gnome-start: launch the GNOME 48 session, then apply post-start polish
+# (official Debian look + VNC performance settings) once the shell is up.
+# Runs INSIDE the fakechroot Debian system, under dbus-run-session.
+# ============================================================================
+# NOTE: GNOME 48 removed the --builtin flag; it auto-falls-back when systemd
+# is absent. --disable-acceleration-check is essential (llvmpipe only).
+gnome-session --session=gnome-rdp --disable-acceleration-check &
+SESS_PID=$!
+
+# polish runs alongside; it retries internally until the shell is ready
+( sleep 15; /usr/local/bin/gnome-polish >> "$XDG_RUNTIME_DIR/polish.log" 2>&1 ) &
+
+wait $SESS_PID
