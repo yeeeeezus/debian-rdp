@@ -115,7 +115,7 @@ user_pref("browser.aboutwelcome.enabled", false);
 EOF
 
 echo "== 7. host-side service scripts =="
-for f in debian-supervisor debian-status debian-session debian-start debian-stop; do
+for f in debian-supervisor debian-status debian-session debian-start debian-stop rdp-keepalive; do
   cp "$DEPLOY/gnome-runtime/$f" $BASE/bin/ && chmod +x $BASE/bin/$f
 done
 cp "$DEPLOY/gnome-runtime/rdp-save-daemon" "$DEPLOY/gnome-runtime/rdp-repos-setup.sh" $BASE/bin/ && chmod +x $BASE/bin/rdp-save-daemon $BASE/bin/rdp-repos-setup.sh

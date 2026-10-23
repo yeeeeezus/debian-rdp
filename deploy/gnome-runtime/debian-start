@@ -14,5 +14,12 @@ else
   sleep 1
   echo "supervisor started"
 fi
+
+# top-level keepalive: revives the supervisor if IT ever dies
+if [ -x "$BASE/bin/rdp-keepalive" ] && ! pgrep -f "rdp-keepalive" >/dev/null 2>&1; then
+  ( setsid nohup "$BASE/bin/rdp-keepalive" >> "$RUN/keepalive.log" 2>&1 < /dev/null & )
+  sleep 1
+  echo "keepalive started"
+fi
 sleep 2
 exec "$BASE/bin/debian-status"
