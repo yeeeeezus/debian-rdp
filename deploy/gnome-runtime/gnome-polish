@@ -62,8 +62,22 @@ G org.gnome.desktop.peripherals.mouse tap-to-click true
 echo "gnome-polish applied at $(date)"
 
 # ---------- trust desktop launchers (proper names, no warning badges) ----------
-for f in /home/debian/Desktop/*.desktop; do
-  [ -f "$f" ] || continue
-  gio set "$f" metadata::trusted true 2>/dev/null || true
+# gio set SILENTLY FAILS when the gvfs metadata daemon (org.gtk.vfs.Metadata)
+# is not on the session bus yet (shell-ready != gvfsd-ready) -> retry and
+# VERIFY by reading the attribute back; touch each file afterwards so DING
+# refreshes (drops stale untrusted X badges).
+trust_ok=0
+for attempt in 1 2 3 4 5 6; do
+  trust_ok=1
+  for f in /home/debian/Desktop/*.desktop; do
+    [ -f "$f" ] || continue
+    gio set "$f" metadata::trusted true 2>/dev/null || true
+    gio info -a metadata::trusted "$f" 2>/dev/null | grep -q 'metadata::trusted: true' || trust_ok=0
+  done
+  [ "$trust_ok" = 1 ] && break
+  sleep 5
 done
-echo "launchers trusted"
+for f in /home/debian/Desktop/*.desktop; do
+  [ -f "$f" ] && touch "$f"
+done
+echo "launchers trusted (verified=$trust_ok, attempts=$attempt)"
