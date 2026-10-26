@@ -113,12 +113,113 @@
   #status.show { opacity: 1; }
   #status .ok { color: #8ff0a4; }
   #status .err { color: #ff9c9c; }
+
+  /* ---------- slide-in drawers (clipboard / files) ---------- */
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 45;
+    width: min(350px, 94vw);
+    background: rgba(15,15,21,.94);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border-left: 1px solid rgba(255,255,255,.1);
+    transform: translateX(105%);
+    transition: transform .28s cubic-bezier(.2,.8,.25,1);
+    display: flex; flex-direction: column;
+    padding: calc(env(safe-area-inset-top, 0px) + 14px) 14px
+             calc(env(safe-area-inset-bottom, 0px) + 14px) 14px;
+    gap: 10px; color: #e6e6ea;
+  }
+  .drawer.open { transform: none; }
+  .drawer .dhead {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 14px; font-weight: 650; letter-spacing: .3px;
+  }
+  .drawer .dhead .x {
+    width: 32px; height: 32px; border-radius: 9px; border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.06); color: #eee; font-size: 15px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .drawer .sect { font-size: 11px; opacity: .55; letter-spacing: .6px;
+    text-transform: uppercase; font-weight: 600; margin-top: 2px; }
+  .drawer textarea {
+    width: 100%; min-height: 84px; max-height: 200px; resize: vertical;
+    background: rgba(255,255,255,.045); color: #e6e6ea;
+    border: 1px solid rgba(255,255,255,.12); border-radius: 10px;
+    padding: 10px; font: 12.5px/1.5 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    outline: none;
+  }
+  .drawer textarea:focus { border-color: rgba(215,10,83,.65); }
+  .dbtn {
+    display: block; width: 100%; padding: 10px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.07);
+    color: #f0f0f3; font-size: 13px; font-weight: 600; cursor: pointer;
+    text-align: center; letter-spacing: .3px;
+  }
+  .dbtn:active { background: rgba(215,10,83,.55); }
+  .dbtn.pri { background: linear-gradient(90deg, #d70a53, #ff5c8a); border: none; }
+  .dbtn[disabled] { opacity: .4; pointer-events: none; }
+  .dhint { font-size: 11.5px; opacity: .45; line-height: 1.45; }
+
+  /* file rows */
+  #fdir {
+    width: 100%; padding: 8px 10px; border-radius: 10px;
+    background: rgba(255,255,255,.05); color: #e6e6ea;
+    border: 1px solid rgba(255,255,255,.14); font-size: 13px; outline: none;
+  }
+  #flist { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
+    -webkit-overflow-scrolling: touch; touch-action: pan-y; padding-right: 2px; }
+  .frow {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+    border-radius: 10px; padding: 9px 10px;
+  }
+  .frow .fi { width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto;
+    background: rgba(215,10,83,.16); display: flex; align-items: center; justify-content: center; }
+  .frow .fi svg { width: 16px; height: 16px; fill: #ff9cbb; }
+  .frow .fn { flex: 1; min-width: 0; }
+  .frow .fn b { display: block; font-size: 12.5px; font-weight: 600; color: #f2f2f5;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .frow .fn span { font-size: 10.5px; opacity: .5; }
+  .frow .fdl {
+    width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto;
+    border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.06);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .frow .fdl:active { background: rgba(215,10,83,.55); }
+  .frow .fdl svg { width: 16px; height: 16px; fill: #fff; }
+  #fempty { text-align: center; opacity: .4; font-size: 12.5px; padding: 26px 10px; }
+  #fprog { display: none; }
+  #fprog.on { display: block; }
+  #fprog .track { height: 4px; border-radius: 99px; background: rgba(255,255,255,.1); overflow: hidden; }
+  #fprog .track i { display: block; height: 100%; width: 0%;
+    background: linear-gradient(90deg, #d70a53, #ff5c8a); transition: width .2s; }
+  #fprog .lbl { font-size: 11px; opacity: .6; margin-top: 5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* drop-to-upload overlay */
+  #drop {
+    position: fixed; inset: 0; z-index: 60; display: none;
+    align-items: center; justify-content: center; flex-direction: column; gap: 14px;
+    background: rgba(13,13,18,.86);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    border: 2px dashed rgba(215,10,83,.55);
+    color: #fff; pointer-events: none;
+  }
+  #drop.on { display: flex; }
+  #drop svg { width: 54px; height: 54px; fill: #ff5c8a; }
+  #drop b { font-size: 16px; font-weight: 650; }
+  #drop span { font-size: 12.5px; opacity: .6; }
 </style>
 </head>
 <body>
   <div id="screen"></div>
 
   <div id="bar" class="hidden">
+    <button id="btn-clip" title="Clipboard" aria-label="Clipboard sync">
+      <svg viewBox="0 0 24 24"><path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v2h10V4h2v16z"/></svg>
+    </button>
+    <button id="btn-files" title="Files" aria-label="File transfer">
+      <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
+    </button>
     <button id="btn-fs" title="Fullscreen" aria-label="Fullscreen">
       <svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4V4zm16 0v6h-2V6h-4V4h6zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z"/></svg>
     </button>
@@ -138,6 +239,41 @@
     <p class="sub">trixie · GNOME 48 · remote session</p>
     <div id="console"></div>
     <div id="progress"><i id="prog-fill"></i></div>
+  </div>
+
+  <!-- clipboard drawer -->
+  <div id="clippanel" class="drawer">
+    <div class="dhead"><span>Clipboard</span>
+      <button class="x" data-close="clippanel">✕</button></div>
+    <div class="sect">From the desktop</div>
+    <textarea id="clip-recv" placeholder="Copy something inside the desktop (Ctrl+C) — it appears here…" readonly></textarea>
+    <button class="dbtn" id="clip-copy">Copy to this device</button>
+    <div class="sect">To the desktop</div>
+    <textarea id="clip-send" placeholder="Type or paste text here, then send — paste it anywhere in the desktop with Ctrl+V"></textarea>
+    <button class="dbtn pri" id="clip-sendbtn">Send to desktop</button>
+    <div class="dhint">Two-way sync: text copied in the desktop arrives here automatically; text sent from here pastes with Ctrl+V in any desktop app.</div>
+  </div>
+
+  <!-- files drawer -->
+  <div id="filepanel" class="drawer">
+    <div class="dhead"><span>Files</span>
+      <button class="x" data-close="filepanel">✕</button></div>
+    <div class="sect">Desktop folders</div>
+    <select id="fdir"></select>
+    <button class="dbtn pri" id="fup-btn">⬆ Upload to Downloads</button>
+    <input type="file" id="fup-input" multiple style="display:none">
+    <div id="fprog"><div class="track"><i id="fprog-fill"></i></div>
+      <div class="lbl" id="fprog-lbl"></div></div>
+    <div class="sect">Files in this folder</div>
+    <div id="flist"></div>
+    <div class="dhint">Uploads land in ~/Downloads inside the desktop (auto-backed-up to GitHub). You can also drag &amp; drop files anywhere on the page.</div>
+  </div>
+
+  <!-- drag&drop overlay -->
+  <div id="drop">
+    <svg viewBox="0 0 24 24"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h.71C7.37 7.69 9.48 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3s-1.34 3-3 3z"/></svg>
+    <b>Drop files to upload</b>
+    <span>they will appear in ~/Downloads inside the desktop</span>
   </div>
 
 <script type="module">
@@ -287,6 +423,7 @@ function connect() {
       updateOverlayState();
       showStatus('<span class="ok">● connected</span> · ' +
         rfb._fbWidth + '×' + rfb._fbHeight, true);
+      refreshDirs();
     }));
     requestWakeLock();
   });
@@ -309,7 +446,203 @@ function connect() {
     line('[FAILED] authentication — VNC password changed', 'fail');
     showStatus('<span class="err">auth failed — reload the page</span>', false);
   });
+
+  /* desktop -> browser clipboard (autocutsel bridges X CLIPBOARD to the
+     VNC CutText channel; noVNC surfaces it here) */
+  rfb.addEventListener('clipboard', e => {
+    if (e.detail && typeof e.detail.text === 'string' && e.detail.text) {
+      $('clip-recv').value = e.detail.text;
+      showStatus('<span class="ok">clipboard</span> — text copied in the desktop is ready');
+    }
+  });
 }
+
+/* =====================================================================
+   Drawer plumbing (clipboard + files panels)
+   ===================================================================== */
+function closeDrawers(except) {
+  for (const id of ['clippanel', 'filepanel']) {
+    if (id !== except) $(id).classList.remove('open');
+  }
+}
+function toggleDrawer(id) {
+  const el = $(id);
+  const willOpen = !el.classList.contains('open');
+  closeDrawers(id);
+  el.classList.toggle('open', willOpen);
+  if (willOpen && id === 'filepanel') refreshList();
+}
+$('btn-clip').addEventListener('click', () => toggleDrawer('clippanel'));
+$('btn-files').addEventListener('click', () => toggleDrawer('filepanel'));
+document.querySelectorAll('.drawer .x').forEach(b =>
+  b.addEventListener('click', () => closeDrawers()));
+
+/* --- clipboard actions --- */
+$('clip-copy').addEventListener('click', async () => {
+  const t = $('clip-recv').value;
+  if (!t) return;
+  try {
+    await navigator.clipboard.writeText(t);
+    showStatus('<span class="ok">copied</span> to this device');
+  } catch (e) {
+    $('clip-recv').select();
+    document.execCommand('copy');
+    showStatus('<span class="ok">copied</span> to this device');
+  }
+});
+$('clip-sendbtn').addEventListener('click', () => {
+  const t = $('clip-send').value;
+  if (!t || !rfb) return;
+  try {
+    rfb.clipboardPasteFrom(t);
+    showStatus('<span class="ok">sent</span> — Ctrl+V inside the desktop');
+  } catch (e) {
+    showStatus('<span class="err">not connected</span>', false);
+  }
+});
+
+/* =====================================================================
+   File bridge (/fapi served by front-proxy on :3000)
+   ===================================================================== */
+let curDir = 'Downloads';
+const DIR_LABELS = {
+  Downloads: 'Downloads', Desktop: 'Desktop', Documents: 'Documents',
+  Pictures: 'Pictures', Music: 'Music', Videos: 'Videos'
+};
+
+async function refreshDirs() {
+  try {
+    const r = await fetch('/fapi/dirs', { cache: 'no-store' });
+    if (!r.ok) throw 0;
+    const j = await r.json();
+    const sel = $('fdir');
+    sel.innerHTML = '';
+    for (const d of j.dirs) {
+      const o = document.createElement('option');
+      o.value = d; o.textContent = DIR_LABELS[d] || d;
+      sel.appendChild(o);
+    }
+    sel.value = curDir;
+  } catch (e) { /* bridge offline (rebuild/fallback) - leave as is */ }
+}
+
+function fmtSize(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1024 * 1024 * 1024) return (n / 1048576).toFixed(1) + ' MB';
+  return (n / 1073741824).toFixed(2) + ' GB';
+}
+function fmtDate(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+    ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+async function refreshList() {
+  const list = $('flist');
+  try {
+    const r = await fetch('/fapi/list?dir=' + encodeURIComponent(curDir),
+      { cache: 'no-store' });
+    if (!r.ok) throw 0;
+    const j = await r.json();
+    list.innerHTML = '';
+    if (!j.files.length) {
+      list.innerHTML = '<div id="fempty">empty folder</div>';
+      return;
+    }
+    for (const f of j.files) {
+      const row = document.createElement('div');
+      row.className = 'frow';
+      row.innerHTML =
+        '<div class="fi"><svg viewBox="0 0 24 24"><path d="M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg></div>' +
+        '<div class="fn"><b></b><span>' + fmtSize(f.size) + ' · ' + fmtDate(f.mtime) + '</span></div>' +
+        '<button class="fdl" title="Download"><svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></button>';
+      row.querySelector('b').textContent = f.name;
+      row.querySelector('.fdl').addEventListener('click', () => {
+        const a = document.createElement('a');
+        a.href = '/fapi/download?dir=' + encodeURIComponent(curDir) +
+                 '&name=' + encodeURIComponent(f.name);
+        a.download = f.name;
+        document.body.appendChild(a); a.click(); a.remove();
+      });
+      list.appendChild(row);
+    }
+  } catch (e) {
+    list.innerHTML = '<div id="fempty">file bridge offline —<br>reconnecting after boot…</div>';
+  }
+}
+
+$('fdir').addEventListener('change', () => { curDir = $('fdir').value; refreshList(); });
+
+function uploadFiles(files) {
+  if (!files || !files.length) return;
+  closeDrawers();
+  const prog = $('fprog'), fill = $('fprog-fill'), lbl = $('fprog-lbl');
+  let idx = 0;
+  const next = () => {
+    if (idx >= files.length) {
+      setTimeout(() => prog.classList.remove('on'), 1500);
+      showStatus('<span class="ok">uploaded</span> · ' + files.length +
+        (files.length === 1 ? ' file' : ' files') + ' → ~/Downloads');
+      return;
+    }
+    const f = files[idx++];
+    prog.classList.add('on');
+    fill.style.width = '0%';
+    lbl.textContent = 'Uploading ' + f.name + '…';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/fapi/upload?name=' + encodeURIComponent(f.name));
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable)
+        fill.style.width = Math.round(e.loaded / e.total * 100) + '%';
+    };
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        fill.style.width = '100%';
+        setTimeout(next, 250);
+      } else {
+        let msg = 'upload failed';
+        try { msg = JSON.parse(xhr.responseText).error || msg; } catch (e) {}
+        prog.classList.remove('on');
+        showStatus('<span class="err">' + msg + '</span>', false);
+      }
+    };
+    xhr.onerror = () => {
+      prog.classList.remove('on');
+      showStatus('<span class="err">upload failed — bridge offline?</span>', false);
+    };
+    xhr.send(f);
+  };
+  next();
+}
+
+$('fup-btn').addEventListener('click', () => $('fup-input').click());
+$('fup-input').addEventListener('change', e => {
+  uploadFiles(e.target.files);
+  e.target.value = '';
+});
+
+/* drag & drop anywhere on the page */
+const dropEl = $('drop');
+let dragDepth = 0;
+window.addEventListener('dragenter', e => {
+  e.preventDefault();
+  if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+    dragDepth++;
+    dropEl.classList.add('on');
+  }
+});
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('dragleave', e => {
+  e.preventDefault();
+  if (--dragDepth <= 0) { dragDepth = 0; dropEl.classList.remove('on'); }
+});
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  dragDepth = 0;
+  dropEl.classList.remove('on');
+  if (e.dataTransfer && e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+});
 
 /* ---------- controls ---------- */
 $('btn-fs').addEventListener('click', async () => {

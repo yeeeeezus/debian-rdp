@@ -4,9 +4,15 @@
 # Keeps alive:
 #   1. Xtigervnc :1  (VNC on localhost:5901)          [fakechroot]
 #   2. GNOME 48 session on :1                        [fakechroot]
-#   3. websockify + noVNC web client on 0.0.0.0:3000 [fakechroot]
-#   4. rdp-save daemon (continuous GitHub backup)
-# Auto-restarts any component that dies. Before restarting the session it
+#   3. websockify backend on 127.0.0.1:3001          [fakechroot]
+#   4. front-proxy on 0.0.0.0:3000                   [HOST python]
+#      - file bridge (/fapi upload-list-download)
+#      - byte-transparent WS/static proxy -> :3001
+#   5. rdp-save daemon (continuous GitHub backup)
+# Auto-restarts any component that dies. If front-proxy crash-loops the
+# supervisor FALLS BACK to plain websockify on :3000 so the desktop stays
+# reachable (file bridge offline in that mode).
+# Before restarting the session it
 # SWEEPS the whole leftover tree (prevents WM-selection races, dbus zombies
 # and process exhaustion that crash-looping sessions used to cause).
 # Launched by debian-start.
@@ -77,13 +83,34 @@ start_session() {
 }
 
 start_ws() {
-  # same ownership rule for websockify: clear the port before binding
+  # same ownership rule for websockify: clear the port before binding.
+  # websockify is now the BACKEND on 127.0.0.1:3001 - front-proxy fronts
+  # it on :3000 (see start_front). In FALLBACK mode it binds :3000 itself.
   pkill -9 -f 'websockify' 2>/dev/null
   sleep 1
-  "$CHROOT" "$S" /usr/bin/websockify --web=/usr/share/novnc \
-    0.0.0.0:3000 127.0.0.1:5901 >> "$WS_LOG" 2>&1 &
+  if [ "${FALLBACK:-0}" = "1" ]; then
+    "$CHROOT" "$S" /usr/bin/websockify --web=/usr/share/novnc \
+      0.0.0.0:3000 127.0.0.1:5901 >> "$WS_LOG" 2>&1 &
+  else
+    "$CHROOT" "$S" /usr/bin/websockify --web=/usr/share/novnc \
+      127.0.0.1:3001 127.0.0.1:5901 >> "$WS_LOG" 2>&1 &
+  fi
   echo $! > "$RUN/ws.pid"
-  log "started websockify pid $(cat "$RUN/ws.pid")"
+  log "started websockify pid $(cat "$RUN/ws.pid") (${FALLBACK:-0} = fallback)"
+}
+
+start_front() {
+  # front-proxy owns :3000: /fapi file bridge + transparent proxy to the
+  # websockify backend on :3001. Runs on HOST python (no chroot needed).
+  if [ "${FALLBACK:-0}" = "1" ]; then
+    log "front-proxy disabled (fallback mode)"
+    return
+  fi
+  if pid_alive "$RUN/front.pid"; then return; fi
+  pkill -9 -f 'bin/front-proxy' 2>/dev/null
+  /home/z/debian/bin/front-proxy >> "$RUN/front-proxy.log" 2>&1 &
+  echo $! > "$RUN/front.pid"
+  log "started front-proxy pid $(cat "$RUN/front.pid")"
 }
 
 start_save() {
@@ -94,9 +121,14 @@ start_save() {
 }
 
 # clean stale pidfiles from a previous run
-for f in xvnc session ws; do
+for f in xvnc session ws front; do
   pid_alive "$RUN/$f.pid" || rm -f "$RUN/$f.pid"
 done
+
+FRONT_FAILS=0
+FRONT_STUCK=0
+FALLBACK=0
+port3000() { timeout 1 bash -c 'echo > /dev/tcp/127.0.0.1/3000' 2>/dev/null; }
 
 log "supervisor up (geometry=$GEOMETRY, GNOME)"
 
@@ -112,9 +144,37 @@ while true; do
   if pid_alive "$RUN/xvnc.pid" && ! pid_alive "$RUN/session.pid"; then
     start_session
   fi
-  # 3. websockify / noVNC web client
+  # 3. websockify backend / noVNC web client
   if ! pid_alive "$RUN/ws.pid"; then
     start_ws
+  fi
+  # 3a. front-proxy (file bridge + :3000 ingress)
+  if ! pid_alive "$RUN/front.pid"; then
+    if [ "$FALLBACK" = "1" ]; then
+      :   # fallback: websockify already owns :3000
+    else
+      start_front
+      FRONT_FAILS=$((FRONT_FAILS + 1))
+      FRONT_STUCK=0
+      if [ "$FRONT_FAILS" -ge 3 ]; then
+        FALLBACK=1
+        log "front-proxy failed ${FRONT_FAILS}x - FALLING BACK to plain websockify on :3000"
+        start_ws
+      fi
+    fi
+  else
+    # alive but port not answering = wedged: kill + let loop restart it
+    if port3000; then
+      FRONT_STUCK=0
+      FRONT_FAILS=0   # healthy period forgives past failures
+    else
+      FRONT_STUCK=$((FRONT_STUCK + 1))
+      if [ "$FRONT_STUCK" -ge 2 ]; then
+        log "front-proxy wedged (pid up, :3000 dead) - recycling"
+        kill -9 "$(cat "$RUN/front.pid" 2>/dev/null)" 2>/dev/null
+        rm -f "$RUN/front.pid"
+      fi
+    fi
   fi
   # 3b. websockify handler flood guard: handlers can wedge forever when
   # the VNC side hiccuped (each stuck client = one process). >15 procs

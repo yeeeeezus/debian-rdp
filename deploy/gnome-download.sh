@@ -72,6 +72,8 @@ PKGS=(
   # --- utilities ---
   qbittorrent fastfetch htop p7zip-full zip unzip unrar-free vim nano less
   file curl wget bc rsync bash-completion
+  # --- remote desktop experience ---
+  autocutsel xclip tree
 )
 
 # self-healing resolve loop: drop whatever trixie doesn't have

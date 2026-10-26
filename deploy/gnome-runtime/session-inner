@@ -37,4 +37,15 @@ mkdir -p /run/dbus 2>/dev/null
 rm -f /run/dbus/pid /run/dbus/system_bus_socket 2>/dev/null
 dbus-daemon --system --nofork >/dev/null 2>&1 &
 
+# --- clipboard bridge: VNC CutText <-> X11 PRIMARY + CLIPBOARD -----------
+# Xtigervnc maps the VNC CutText channel to the X cut buffer only, so
+# Ctrl+V inside GNOME apps would not see browser-sent text. Two autocutsel
+# instances keep PRIMARY and CLIPBOARD in sync with the cut buffer in BOTH
+# directions: copy in the desktop -> browser clipboard event; paste from
+# the browser -> works with Ctrl+V in any GNOME app.
+if [ -x /usr/bin/autocutsel ]; then
+  /usr/bin/autocutsel -fork >/dev/null 2>&1
+  /usr/bin/autocutsel -selection CLIPBOARD -fork >/dev/null 2>&1
+fi
+
 exec dbus-run-session -- /usr/local/bin/gnome-start

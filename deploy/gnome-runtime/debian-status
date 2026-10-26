@@ -13,7 +13,7 @@ pidof_file() { [ -f "$1" ] && cat "$1" 2>/dev/null; }
 SUP=$(pgrep -f "debian-supervisor" | head -1)
 [ -n "$SUP" ] && ok "supervisor running (pid $SUP)" || bad "supervisor not running"
 
-for f in xvnc session ws; do
+for f in xvnc session ws front; do
   P=$(pidof_file "$RUN/$f.pid")
   if [ -n "$P" ] && kill -0 "$P" 2>/dev/null; then
     ok "$f alive (pid $P)"
@@ -22,6 +22,18 @@ for f in xvnc session ws; do
   fi
 done
 
+# file bridge (front-proxy /fapi endpoints on :3000)
+FB=$(curl -s --max-time 3 http://127.0.0.1:3000/fapi/health 2>/dev/null)
+case "$FB" in
+  ok*) ok "file bridge up (upload/list/download via :3000/fapi)" ;;
+  *)
+    if ss -tln 2>/dev/null | grep -q '0.0.0.0:3000'; then
+      echo "WARN file bridge offline (front-proxy fallback mode - VNC still served)"
+    else
+      bad "file bridge down"
+    fi ;;
+esac
+
 # ports
 if ss -tln 2>/dev/null | grep -q '127.0.0.1:5901'; then
   ok "VNC listening on localhost:5901"
@@ -29,9 +41,9 @@ else
   bad "VNC not listening on 5901"
 fi
 if ss -tln 2>/dev/null | grep -q '0.0.0.0:3000'; then
-  ok "noVNC/websockify listening on 0.0.0.0:3000"
+  ok "ingress listening on 0.0.0.0:3000 (front-proxy -> websockify :3001)"
 else
-  bad "websockify not listening on 3000"
+  bad "ingress not listening on 3000"
 fi
 if ss -tln 2>/dev/null | grep -q ':81 '; then
   ok "preview proxy (caddy :81) up"

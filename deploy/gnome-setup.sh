@@ -130,6 +130,9 @@ for f in debian-supervisor debian-status debian-session debian-start debian-stop
   cp "$DEPLOY/gnome-runtime/$f" $BASE/bin/ && chmod +x $BASE/bin/$f
 done
 cp "$DEPLOY/gnome-runtime/rdp-save-daemon" "$DEPLOY/gnome-runtime/rdp-repos-setup.sh" $BASE/bin/ && chmod +x $BASE/bin/rdp-save-daemon $BASE/bin/rdp-repos-setup.sh
+# front-proxy: HOST-side ingress on :3000 (file bridge /fapi/* + transparent
+# websockify passthrough) - plain python3 file, no chroot needed
+cp "$DEPLOY/gnome-runtime/front-proxy.py" $BASE/bin/front-proxy && chmod +x $BASE/bin/front-proxy
 mkdir -p $BASE/run $BASE/logs
 
 echo "== 8. desktop integration (vault, launchers, helpers) =="
