@@ -6,45 +6,76 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#101014">
+<meta name="theme-color" content="#0d0d12">
 <title>Debian 13 · Remote Desktop</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png">
+<link rel="icon" type="image/svg+xml" href="debian-swirl.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     margin: 0; padding: 0; width: 100%; height: 100%;
-    overflow: hidden; background: #101014;
+    overflow: hidden; background: #0d0d12;
     overscroll-behavior: none; touch-action: none;
     position: fixed; inset: 0;
     font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
-  #screen { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; background: #101014; }
+  #screen { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; background: #0d0d12; }
   #screen canvas { display: block; }
 
-  /* ---------- connection overlay ---------- */
+  /* ---------- boot overlay (Debian-style) ---------- */
   #overlay {
     position: fixed; inset: 0; z-index: 50;
-    display: flex; flex-direction: column; gap: 16px;
+    display: flex; flex-direction: column; gap: 10px;
     align-items: center; justify-content: center;
-    background: radial-gradient(1200px 700px at 50% 30%, #1c1c26 0%, #101014 70%);
-    color: #fff; text-align: center; padding: 28px;
-    transition: opacity .4s ease; 
+    background: #0d0d12;
+    color: #e6e6ea; text-align: center; padding: 24px;
+    transition: opacity .5s ease;
   }
   #overlay.hidden { opacity: 0; pointer-events: none; }
-  .logo {
-    width: 64px; height: 64px; border-radius: 16px;
-    background: linear-gradient(135deg, #d70a53 0%, #fff 100%);
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 800; color: #d70a53; font-size: 26px;
-    box-shadow: 0 10px 40px rgba(215, 10, 83, .35);
+  #swirl { height: 76px; width: auto; filter: drop-shadow(0 6px 30px rgba(215,10,83,.38)); }
+  #overlay h1 {
+    font-size: 17px; margin: 14px 0 2px; font-weight: 600;
+    letter-spacing: .4px; color: #f2f2f5;
   }
-  #overlay h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: .2px; }
-  #overlay p { margin: 0; opacity: .65; font-size: 13px; max-width: 440px; line-height: 1.55; }
-  .spinner {
-    width: 26px; height: 26px; border-radius: 50%;
-    border: 3px solid rgba(255,255,255,.18); border-top-color: #fff;
-    animation: spin .9s linear infinite;
+  #overlay .sub { font-size: 12px; opacity: .5; margin: 0 0 18px; }
+
+  /* systemd-style console */
+  #console {
+    font-family: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+    font-size: 12.5px; line-height: 1.75;
+    width: min(560px, 92vw); text-align: left;
+    background: rgba(255,255,255,.025);
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 10px; padding: 12px 16px;
+    min-height: 118px;
   }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  #console div { opacity: .42; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #console div:last-child { opacity: 1; }
+  #console .ok   { color: #7ee787; }
+  #console .attn { color: #e3b341; }
+  #console .fail { color: #ff7b72; }
+  #console .plain{ color: #cfd2d8; }
+  .cursor {
+    display: inline-block; width: .55em; height: 1.05em;
+    background: #e6e6ea; vertical-align: text-bottom; margin-left: 2px;
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* stage progress (rebuild mode only) */
+  #progress {
+    width: min(560px, 92vw); height: 3px; border-radius: 99px;
+    background: rgba(255,255,255,.08); overflow: hidden;
+    opacity: 0; transition: opacity .4s;
+  }
+  #progress.on { opacity: 1; }
+  #progress i {
+    display: block; height: 100%; width: 0%;
+    background: linear-gradient(90deg, #d70a53, #ff5c8a);
+    transition: width 1.2s ease;
+  }
 
   /* ---------- floating control pill ---------- */
   #bar {
@@ -102,32 +133,50 @@
   <div id="status"></div>
 
   <div id="overlay">
-    <div class="logo">D</div>
-    <h1 id="ov-title">Connecting to your Debian desktop…</h1>
-    <p id="ov-text">GNOME 48 on Debian 13 · your work auto-saves to GitHub</p>
-    <div class="spinner"></div>
+    <img id="swirl" src="debian-swirl.svg" alt="Debian">
+    <h1>Debian GNU/Linux 13</h1>
+    <p class="sub">trixie · GNOME 48 · remote session</p>
+    <div id="console"></div>
+    <div id="progress"><i id="prog-fill"></i></div>
   </div>
 
 <script type="module">
-import RFB from './core/rfb.js';
-
 const VNC_PASSWORD = 'trf7-wgrL-Xv1I-LyBH';
 
 const $ = id => document.getElementById(id);
 const screen = $('screen');
 const overlay = $('overlay');
-const ovTitle = $('ov-title');
-const ovText = $('ov-text');
+const consoleEl = $('console');
+const progress = $('progress');
+const progFill = $('prog-fill');
 const bar = $('bar');
 const statusEl = $('status');
 
+let RFB = null;
 let rfb = null;
 let connected = false;
 let retries = 0;
 let statusTimer = null;
 let wakeLock = null;
+let probing = false;
 
-function showStatus(html, ok) {
+/* ---------- systemd-style console ---------- */
+const MAXLINES = 6;
+function line(text, cls, cursor) {
+  const div = document.createElement('div');
+  div.className = cls || 'plain';
+  div.textContent = text;
+  if (cursor) {
+    const c = document.createElement('span');
+    c.className = 'cursor';
+    div.appendChild(c);
+  }
+  consoleEl.appendChild(div);
+  while (consoleEl.children.length > MAXLINES) consoleEl.removeChild(consoleEl.firstChild);
+}
+
+/* ---------- status pill (connected mode) ---------- */
+function showStatus(html) {
   statusEl.innerHTML = html;
   statusEl.classList.add('show');
   clearTimeout(statusTimer);
@@ -140,7 +189,6 @@ function updateOverlayState() {
     bar.classList.remove('hidden');
   } else {
     overlay.classList.remove('hidden');
-    $('overlay').querySelector('.spinner').style.display = '';
   }
 }
 
@@ -155,14 +203,62 @@ async function requestWakeLock() {
   } catch (e) { /* not critical */ }
 }
 
-function connect() {
-  ovTitle.textContent = retries === 0
-    ? 'Connecting to your Debian desktop…'
-    : 'Reconnecting… (attempt ' + (retries + 1) + ')';
-  ovText.textContent = 'GNOME 48 on Debian 13 · your work auto-saves to GitHub';
+/* =====================================================================
+   Boot state machine
+   ---------------------------------------------------------------------
+   probe()  - is a rebuild running? (status.json served by the bootstrap
+              placeholder). 404 -> normal connect. stage notes -> rebuild.
+   startApp()- dynamic-import noVNC, connect to the live desktop.
+   ===================================================================== */
+const STAGE_PCT = { boot: 4, download: 12, extract: 42, setup: 72, data: 88, start: 96, ready: 100 };
 
+async function probe() {
+  if (probing) return;
+  probing = true;
+  let netErrs = 0;
+  line('Debian GNU/Linux 13 (trixie) — web console', 'plain', true);
+  while (true) {
+    let st = null;
+    try {
+      const r = await fetch('status.json', { cache: 'no-store' });
+      if (r.status === 404) break;                 // real stack -> connect
+      if (r.ok) st = await r.json();
+    } catch (e) { netErrs++; }
+    if (!st) {
+      if (netErrs > 10) break;                     // placeholder gone -> connect
+      await new Promise(r => setTimeout(r, 1500));
+      continue;
+    }
+    if (st.stage === 'ready') break;               // boot complete -> connect
+    /* rebuild in progress: show the real bootstrap stage note */
+    progress.classList.add('on');
+    progFill.style.width = (STAGE_PCT[st.stage] || 50) + '%';
+    line('[ .. ] ' + (st.note || st.stage), st.cls || 'plain', true);
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  probing = false;
+  startApp();
+}
+
+async function startApp() {
+  if (!RFB) {
+    try {
+      const mod = await import('./core/rfb.js');
+      RFB = mod.default;
+    } catch (e) {
+      /* rfb.js not served yet (server switching) - retry shortly */
+      setTimeout(startApp, 2000);
+      return;
+    }
+  }
+  line('[ OK ] Starting VNC tunnel…', 'ok', true);
+  connect();
+}
+
+function connect() {
   try { rfb && rfb.disconnect(); } catch (e) {}
   connected = false;
+  updateOverlayState();
 
   rfb = new RFB(screen, wsURL(), {
     credentials: { password: VNC_PASSWORD },
@@ -176,15 +272,20 @@ function connect() {
        either way there are NEVER scrollbars */
   rfb.scaleViewport = true;
   rfb.resizeSession = true;
-  rfb.background = '#101014';
+  rfb.background = '#0d0d12';
   rfb.showLocalCursor = true;
 
   rfb.addEventListener('connect', () => {
     connected = true;
     retries = 0;
-    updateOverlayState();
-    showStatus('<span class="ok">● connected</span> · ' +
-      rfb._fbWidth + '×' + rfb._fbHeight, true);
+    line('[ OK ] Display server :1 — authenticated', 'ok');
+    /* fade as soon as the first real frame is painted */
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      line('[ OK ] GNOME 48 — graphical interface reached', 'ok');
+      updateOverlayState();
+      showStatus('<span class="ok">● connected</span> · ' +
+        rfb._fbWidth + '×' + rfb._fbHeight, true);
+    }));
     requestWakeLock();
   });
 
@@ -194,15 +295,17 @@ function connect() {
     if (e.detail && e.detail.clean) {
       showStatus('<span class="err">disconnected</span>', false);
     }
-    /* auto-reconnect with gentle backoff - never leaves the user stranded */
+    /* auto-reconnect with gentle backoff - never leaves the user stranded;
+       every 3rd failure, re-probe in case a rebuild kicked in */
     const delay = Math.min(1500 * Math.pow(1.6, retries++), 10000);
-    ovText.textContent = 'Reconnecting in ' + Math.round(delay / 1000) + 's…';
+    line('[ATTN] link lost — retry ' + retries + ' in ' + Math.round(delay / 1000) + 's', 'attn', true);
+    if (retries % 3 === 0) { probe(); return; }
     setTimeout(connect, delay);
   });
 
   rfb.addEventListener('securityfailure', () => {
-    ovTitle.textContent = 'Authentication failed';
-    ovText.textContent = 'The VNC password changed - reload the page.';
+    line('[FAILED] authentication — VNC password changed', 'fail');
+    showStatus('<span class="err">auth failed — reload the page</span>', false);
   });
 }
 
@@ -226,7 +329,8 @@ $('btn-kb').addEventListener('click', () => {
 
 $('btn-rld').addEventListener('click', () => {
   retries = 0;
-  connect();
+  consoleEl.textContent = '';
+  probe();
 });
 
 /* keep the bar visible while touching, fade while working */
@@ -255,7 +359,7 @@ window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => e.preventDefault());
 
 /* start */
-connect();
+probe();
 </script>
 </body>
 </html>

@@ -35,6 +35,14 @@ supervisor_up()   { pgrep -f "debian-supervisor" >/dev/null 2>&1; }
 vnc_listening()   { ss -ltn 2>/dev/null | grep -q ':5901'; }
 web_listening()   { curl -s -o /dev/null --max-time 5 http://127.0.0.1:3000/ 2>/dev/null; }
 
+# RFB handshake probe: the port can be open while VNC refuses/hangs every
+# client (e.g. TigerVNC blacklist). Only a real "RFB 003.008" greeting
+# proves the desktop is actually reachable. Pure bash, no extra tools.
+vnc_serving() {
+  timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/5901 && head -c 4 <&3' 2>/dev/null \
+    | grep -q 'RFB'
+}
+
 launch_supervisor() {
   # exact same double-fork pattern as debian-start
   ( setsid nohup "$BASE/bin/debian-supervisor" >> "$RUN/supervisor.out" 2>&1 < /dev/null & )
@@ -52,12 +60,12 @@ while true; do
     sleep 10
   fi
 
-  # 2. are the service ports actually serving?
-  if vnc_listening && web_listening; then
+  # 2. are the service ports actually serving? (RFB probe, not just open)
+  if vnc_serving && web_listening; then
     STRIKES=0
   else
     STRIKES=$((STRIKES + 1))
-    log "WARN: ports not serving (vnc=$(vnc_listening && echo up || echo DOWN) web=$(web_listening && echo up || echo DOWN)) strike $STRIKES/3"
+    log "WARN: not serving (vnc=$(vnc_serving && echo up || echo DOWN) web=$(web_listening && echo up || echo DOWN)) strike $STRIKES/3"
     if [ $STRIKES -ge 3 ]; then
       if supervisor_up; then
         log "ACTION: supervisor wedged - killing + restarting it"
@@ -72,7 +80,7 @@ while true; do
 
   LOOPS=$((LOOPS + 1))
   if [ $((LOOPS % 20)) -eq 0 ]; then
-    log "heartbeat: all layers running (vnc=$(vnc_listening && echo up || echo DOWN) web=$(web_listening && echo up || echo DOWN) supervisor=$(supervisor_up && echo up || echo DOWN))"
+    log "heartbeat: all layers running (vnc=$(vnc_serving && echo up || echo DOWN) web=$(web_listening && echo up || echo DOWN) supervisor=$(supervisor_up && echo up || echo DOWN))"
   fi
 
   sleep $INTERVAL

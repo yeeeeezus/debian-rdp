@@ -61,6 +61,7 @@ start_vnc() {
   "$CHROOT" "$S" /usr/bin/Xtigervnc :1 \
     -pn -localhost -ac \
     -rfbauth /home/debian/.vnc/passwd \
+    -BlacklistThreshold 0 -BlacklistTimeout 1 \
     -geometry "$GEOMETRY" -depth 24 -dpi 96 \
     >> "$VNC_LOG" 2>&1 &
   echo $! > "$RUN/xvnc.pid"
@@ -113,6 +114,14 @@ while true; do
   fi
   # 3. websockify / noVNC web client
   if ! pid_alive "$RUN/ws.pid"; then
+    start_ws
+  fi
+  # 3b. websockify handler flood guard: handlers can wedge forever when
+  # the VNC side hiccuped (each stuck client = one process). >40 procs
+  # with at most a few real tabs open = flood -> recycle the whole tree.
+  WSN=$(pgrep -c -f 'websockify' 2>/dev/null || true)
+  if [ "${WSN:-0}" -gt 40 ]; then
+    log "websockify flood: $WSN procs - recycling"
     start_ws
   fi
   # 4. continuous backup daemon

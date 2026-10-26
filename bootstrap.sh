@@ -36,8 +36,28 @@ fi
 echo "authenticated as: $GH_USER"
 echo "disk free: $(df -h / | awk 'NR==2{print $4}')   (need ~4 GB during build)"
 
+# ------------------------------------------------- boot page placeholder ---
+# Serve the Debian boot page on :3000 from the very first moment, so the
+# web preview shows live boot notes instead of a dead gateway while we
+# rebuild. Killed right before the real stack starts (websockify then
+# serves the SAME page; the browser tab switches over automatically).
+BOOTPAGE=/home/z/debian/bootpage
+mkdir -p "$BOOTPAGE"
+cp deploy/gnome-runtime/novnc-index.html "$BOOTPAGE/index.html"
+cp deploy/assets/debian-swirl.svg deploy/assets/favicon-32.png \
+   deploy/assets/favicon-64.png deploy/assets/apple-touch-icon.png "$BOOTPAGE/"
+bootnote() {  # bootnote <stage> <note>
+  printf '{"stage":"%s","note":"%s"}' "$1" "$2" > "$BOOTPAGE/status.json"
+}
+bootnote boot "Debian GNU/Linux 13 — bootstrapping instance"
+pkill -f boot-placeholder 2>/dev/null
+( setsid nohup python3 deploy/gnome-runtime/boot-placeholder.py "$BOOTPAGE" \
+    > /home/z/debian/bootpage/server.log 2>&1 < /dev/null & )
+echo "-- boot page live on :3000 (preview shows boot notes)"
+
 # --------------------------------------------------- private data repo ----
 echo "-- stage 0/5: fetching your data (private repo rdp-data)"
+bootnote data "Reading configuration from private data repo"
 rm -rf /tmp/rdp-data-clone
 if git clone -q "https://${GH_USER}:${TOKEN}@github.com/${GH_USER}/rdp-data.git" /tmp/rdp-data-clone 2>/dev/null; then
   echo "  data repo cloned ($(find /tmp/rdp-data-clone/home -type f 2>/dev/null | wc -l) files)"
@@ -54,16 +74,23 @@ fi
 
 # --------------------------------------------------------------- build ----
 echo "-- stage 1/5: packages (apt resolves the full GNOME closure)"
+bootnote download "Downloading packages (1.2 GB, full GNOME closure)"
 bash deploy/gnome-download.sh | tail -3
+bootnote download "Packages downloaded — verifying archive"
 
 echo "-- stage 2/5: extraction (dpkg -x into the sysroot)"
+bootnote extract "Unpacking root filesystem (4.7 GB)"
 bash deploy/gnome-extract.sh | tail -4
+bootnote extract "Root filesystem unpacked"
 
 echo "-- stage 3/5: system setup (fakechroot fixups, runtime, Mininet, noVNC)"
+bootnote setup "Configuring Debian 13 trixie + GNOME 48"
 bash deploy/gnome-setup.sh | tail -4
+bootnote setup "System configured — installing desktop assets"
 
 # ------------------------------------------------------ user data sync ----
 echo "-- stage 4/5: restoring your files"
+bootnote data "Restoring your files from GitHub"
 S=/home/z/debian/sysroot
 if [ -d /tmp/rdp-data-clone/home ]; then
   for d in Desktop Documents Downloads Music Pictures Videos Public Templates; do
@@ -105,10 +132,13 @@ rm -rf /tmp/rdp-data-clone
 
 # ---------------------------------------------------------------- start ---
 echo "-- stage 5/5: start + verify"
-pkill -f debian-supervisor 2>/dev/null; sleep 1
+bootnote start "Starting display server + GNOME 48 session"
+pkill -f boot-placeholder 2>/dev/null; sleep 1   # free :3000 for websockify
+pkill -f 'debian-supervisor' 2>/dev/null; sleep 1
 /home/z/debian/bin/debian-start >/dev/null 2>&1
 sleep 30
 /home/z/debian/bin/debian-status
+bootnote ready "Boot complete — starting session"
 
 echo
 echo "=============================================="

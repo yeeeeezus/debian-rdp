@@ -86,6 +86,10 @@ chmod +x $S/usr/local/bin/{mn,mnexec,mininet-lab} 2>/dev/null
 
 echo "== 5. noVNC perfect-fit page =="
 cp "$DEPLOY/gnome-runtime/novnc-index.html" $S/usr/share/novnc/index.html
+# official Debian swirl: favicon + apple-touch + boot-screen logo
+cp "$DEPLOY/assets/debian-swirl.svg" "$DEPLOY/assets/favicon-32.png" \
+   "$DEPLOY/assets/favicon-64.png" "$DEPLOY/assets/apple-touch-icon.png" \
+   $S/usr/share/novnc/
 
 echo "== 6. home skeleton + Firefox tuned profile + VNC password =="
 mkdir -p $H/{Desktop,Documents,Downloads,Music,Pictures,Videos,Templates,Public} $H/.vnc $H/.config/autostart
