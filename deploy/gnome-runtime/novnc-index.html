@@ -159,6 +159,7 @@ let retries = 0;
 let statusTimer = null;
 let wakeLock = null;
 let probing = false;
+let lastNote = '';
 
 /* ---------- systemd-style console ---------- */
 const MAXLINES = 6;
@@ -230,10 +231,11 @@ async function probe() {
       continue;
     }
     if (st.stage === 'ready') break;               // boot complete -> connect
-    /* rebuild in progress: show the real bootstrap stage note */
+    /* rebuild in progress: show the real bootstrap stage note (deduped) */
     progress.classList.add('on');
     progFill.style.width = (STAGE_PCT[st.stage] || 50) + '%';
-    line('[ .. ] ' + (st.note || st.stage), st.cls || 'plain', true);
+    const note = '[ .. ] ' + (st.note || st.stage);
+    if (note !== lastNote) { lastNote = note; line(note, st.cls || 'plain', true); }
     await new Promise(r => setTimeout(r, 2000));
   }
   probing = false;
