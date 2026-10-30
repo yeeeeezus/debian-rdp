@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Android
+Comment=Start the Android environment (emulator window on your desktop)
+Exec=/usr/local/bin/android-start
+Icon=/usr/local/share/icons/hicolor/256x256/apps/android-emulator.png
+Terminal=false
+Categories=Development;System;
+StartupNotify=true

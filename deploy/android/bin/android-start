@@ -1,0 +1,24 @@
+#!/bin/bash
+# android-start — desktop helper: start the Android emulator via the
+# front-proxy API (host side). Safe to call repeatedly (single instance).
+# With --autostart it waits politely for the desktop to settle first.
+if [ "${1:-}" = "--autostart" ]; then
+  for i in $(seq 1 12); do
+    curl -s -m 3 http://127.0.0.1:3000/fapi/health >/dev/null 2>&1 && break
+    sleep 5
+  done
+  sleep 10
+fi
+out=$(curl -s -m 60 -X POST http://127.0.0.1:3000/fapi/android/start)
+case "$out" in
+  *'"ok":true'*|*'"ok": true'*)
+    echo "Android emulator starting — opening the view window."
+    # open (or reuse) the scrcpy view window; it waits for the guest
+    curl -s -m 30 -X POST http://127.0.0.1:3000/fapi/android/view >/dev/null
+    echo "(first boot takes a few minutes; the window shows the boot screen)"
+    ;;
+  *)
+    echo "Android start failed: $out"
+    exit 1
+    ;;
+esac

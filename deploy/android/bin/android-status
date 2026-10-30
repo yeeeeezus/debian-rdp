@@ -1,0 +1,15 @@
+#!/bin/bash
+# android-status — show the Android runtime state (from the front-proxy API).
+curl -s -m 10 http://127.0.0.1:3000/fapi/android | python3 -c '
+import json, sys
+try:
+    s = json.load(sys.stdin)
+except Exception:
+    print("android runtime: API unavailable"); sys.exit(1)
+print("android runtime : %s" % ("provisioned" if s.get("provisioned") else "NOT provisioned"))
+print("emulator        : %s" % ("running (pid %s)" % s.get("pid") if s.get("running") else "stopped"))
+print("adb             : %s" % s.get("adb"))
+print("boot completed  : %s" % ("yes" if s.get("boot_completed") else "no"))
+if s.get("hellotalk_installed") is not None:
+    print("hellotalk       : %s" % ("installed" if s.get("hellotalk_installed") else "not installed"))
+'

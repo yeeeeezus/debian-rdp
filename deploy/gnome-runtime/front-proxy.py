@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -41,6 +42,13 @@ MIN_DISK_FREE = 400 * 1024 ** 2   # abort upload if less than this free
 HEAD_LIMIT = 64 * 1024            # max request head size
 NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._()+,\-]{0,199}\Z")
 CHUNK = 256 * 1024
+
+# Android runtime (userspace emulator under .android-cache, survives resets)
+ACACHE = '/home/z/my-project/.android-cache'
+ADB = ACACHE + '/sdk/platform-tools/adb'
+EMU_LAUNCH = ACACHE + '/emulator-launch.sh'
+POSTBOOT = ACACHE + '/android-session.sh'
+APK_HELPER = ACACHE + '/apk-install-helper.py'
 
 started = time.strftime('%F %T')
 
@@ -186,6 +194,123 @@ async def api_download(client, q):
     log('download %s from %s (%d bytes)' % (name, d, sent))
 
 
+# -------------------------------------------------------------- android fapi
+def android_pid():
+    try:
+        pid = int(open(ACACHE + '/avd/emulator.pid').read().strip())
+        os.kill(pid, 0)
+        return pid
+    except Exception:
+        return None
+
+
+async def adb_query(args, timeout=12):
+    try:
+        p = await asyncio.create_subprocess_exec(
+            ADB, *args,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        out = await asyncio.wait_for(p.communicate(), timeout)
+        return out[0].decode('utf-8', 'replace')
+    except Exception:
+        return ''
+
+
+async def android_state():
+    pid = android_pid()
+    running = pid is not None
+    adb_state = boot = None
+    installed = None
+    if running:
+        out = await adb_query(['devices'])
+        for line in out.splitlines():
+            if line.startswith('emulator-') and len(line.split()) > 1:
+                adb_state = line.split()[1]
+        if adb_state == 'device':
+            boot = (await adb_query(
+                ['shell', 'getprop', 'sys.boot_completed'], 15)).strip()
+            if boot == '1':
+                pk = await adb_query(
+                    ['shell', 'pm', 'list', 'packages', 'com.hellotalk'], 15)
+                installed = 'package:com.hellotalk' in pk
+    provisioned = (os.path.isdir(ACACHE + '/sdk/system-images')
+                   and os.access(ADB, os.X_OK))
+    return {'provisioned': provisioned, 'running': running, 'pid': pid,
+            'adb': adb_state, 'boot_completed': boot == '1',
+            'hellotalk_installed': installed, 'avd': 'android30'}
+
+
+async def api_android(client, q):
+    return await send_json(client, await android_state())
+
+
+async def api_android_start(client, q):
+    if android_pid() is not None:
+        return await send_json(client, {'ok': True, 'already_running': True})
+    if not os.access(EMU_LAUNCH, os.X_OK):
+        return await send_json(client,
+                               {'ok': False, 'error': 'android not provisioned'}, 500)
+    # launch the emulator, then the around-boot session, fully detached
+    # so they survive proxy restarts (own sessions, not our children)
+    for script in (EMU_LAUNCH, POSTBOOT):
+        if os.access(script, os.X_OK):
+            subprocess.Popen(['setsid', 'bash', script],
+                             stdout=open(ACACHE + '/avd/api-start.log', 'a'),
+                             stderr=subprocess.STDOUT,
+                             stdin=subprocess.DEVNULL,
+                             start_new_session=True)
+            log('android start requested -> %s' % script)
+    return await send_json(client, {'ok': True, 'started': True})
+
+
+async def api_android_view(client, q):
+    """Open a scrcpy window (scaled view of the emulator) on the desktop."""
+    SCRCRY = ACACHE + '/scrcpy/run.sh'
+    if android_pid() is None:
+        return await send_json(client, {'ok': False, 'error': 'emulator not running'}, 409)
+    if not os.access(SCRCRY, os.X_OK):
+        return await send_json(client, {'ok': False, 'error': 'scrcpy missing'}, 500)
+    if subprocess.run(['pgrep', '-f', 'scrcpy.*--window-title Android'],
+                      capture_output=True).returncode == 0:
+        return await send_json(client, {'ok': True, 'already_open': True})
+    subprocess.Popen(['setsid', 'bash', SCRCRY],
+                     stdout=open(ACACHE + '/avd/scrcpy.log', 'a'),
+                     stderr=subprocess.STDOUT,
+                     stdin=subprocess.DEVNULL,
+                     env={**os.environ, 'DISPLAY': ':1'},
+                     start_new_session=True)
+    log('android view requested (scrcpy)')
+    return await send_json(client, {'ok': True, 'opened': True})
+
+
+async def api_apk_install(client, q, method):
+    if method != 'POST':
+        return await send_json(client, {'ok': False, 'error': 'POST required'}, 405)
+    src = (q.get('src') or [''])[0]
+    d, _, name = src.partition('/')
+    if safe_dir(d) is None or safe_name(name) is None:
+        return await send_json(client, {'ok': False, 'error': 'bad src'}, 400)
+    full = os.path.join(HOME, d, name)
+    if not os.path.isfile(full):
+        return await send_json(client, {'ok': False, 'error': 'no such file'}, 404)
+    if android_pid() is None:
+        return await send_json(client, {'ok': False, 'error': 'emulator not running'}, 409)
+    if not os.path.isfile(APK_HELPER):
+        return await send_json(client, {'ok': False, 'error': 'helper missing'}, 500)
+    loop = asyncio.get_event_loop()
+
+    def _run():
+        return subprocess.run([sys.executable, APK_HELPER, full],
+                              capture_output=True, text=True, timeout=960)
+    try:
+        p = await loop.run_in_executor(None, _run)
+        lines = (p.stdout or '').strip().splitlines()
+        res = json.loads(lines[-1]) if lines else {'ok': False, 'detail': 'no output'}
+        log('apk-install %s -> ok=%s (%s)' % (name, res.get('ok'), res.get('mode')))
+        return await send_json(client, res)
+    except Exception as e:
+        return await send_json(client, {'ok': False, 'error': str(e)}, 500)
+
+
 async def handle_api(client, method, path):
     u = urllib.parse.urlparse(path)
     q = urllib.parse.parse_qs(u.query)
@@ -199,6 +324,14 @@ async def handle_api(client, method, path):
         return await send_json(client, {'dirs': list(SHARE_DIRS)})
     if u.path == '/fapi/list' and method == 'GET':
         return await api_list(client, q)
+    if u.path == '/fapi/android' and method == 'GET':
+        return await api_android(client, q)
+    if u.path == '/fapi/android/start' and method == 'POST':
+        return await api_android_start(client, q)
+    if u.path == '/fapi/android/view' and method == 'POST':
+        return await api_android_view(client, q)
+    if u.path == '/fapi/apk-install' and method == 'POST':
+        return await api_apk_install(client, q, method)
     if u.path == '/fapi/download' and method == 'GET':
         return await api_download(client, q)
     return await send_json(client, {'error': 'unknown endpoint'}, 404)

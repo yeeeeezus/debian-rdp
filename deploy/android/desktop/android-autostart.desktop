@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Android Autostart
+Comment=Starts the Android emulator after login
+Exec=/usr/local/bin/android-start --autostart
+Icon=/usr/local/share/icons/hicolor/256x256/apps/android-emulator.png
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

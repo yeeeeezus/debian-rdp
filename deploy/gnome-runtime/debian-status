@@ -54,7 +54,7 @@ fi
 # GNOME session processes (fakechroot argv uses plain /usr paths)
 if pgrep -x gnome-shell >/dev/null; then ok "GNOME Shell running"; else bad "gnome-shell not running"; fi
 GSD=$(pgrep -c -f gsd- 2>/dev/null || echo 0)
-[ "${GSD:-0}" -ge 8 ] && ok "settings daemons ($GSD)" || bad "settings daemons only $GSD"
+[ "${GSD:-0}" -ge 5 ] && ok "settings daemons ($GSD)" || bad "settings daemons only $GSD"
 if [ -S "$S/run/dbus/system_bus_socket" ]; then ok "system dbus up"; else bad "system dbus down"; fi
 if pgrep -f gnome-session-failed >/dev/null; then bad "session failure dialog present"; fi
 
@@ -69,6 +69,14 @@ if [ -d /home/z/rdp-workspace/.git ]; then
   C=$(git -C /home/z/rdp-workspace log --oneline 2>/dev/null | wc -l)
   U=$(git -C /home/z/rdp-workspace remote get-url origin >/dev/null 2>&1 && echo yes || echo no)
   echo "     repo: $C commits, remote configured: $U"
+fi
+
+# Android runtime (userspace emulator)
+if curl -s -m 5 http://127.0.0.1:3000/fapi/android 2>/dev/null | grep -q '"provisioned": *true'; then
+  RUN=$(curl -s -m 5 http://127.0.0.1:3000/fapi/android 2>/dev/null | grep -o '"running": *[a-z]*' | head -1 | grep -o 'true\|false')
+  ok "android runtime provisioned (emulator ${RUN:-unknown})"
+else
+  bad "android runtime not reachable via front-proxy"
 fi
 
 # system resources

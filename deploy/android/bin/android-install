@@ -1,0 +1,47 @@
+#!/bin/bash
+# android-install — install an APK/XAPK onto the Android emulator.
+#   android-install [file.apk|file.xapk]
+# Without an argument it opens a file picker (pick files from Downloads,
+# Desktop or Documents — the folders shared with the browser file drawer).
+set -u
+f="${1:-}"
+if [ -z "$f" ]; then
+  f=$(zenity --file-selection --title="Select an Android package to install" \
+        --file-filter='Android packages (apk, xapk) | *.apk *.xapk' 2>/dev/null) || exit 0
+fi
+[ -f "$f" ] || { zenity --error --text="File not found: $f" 2>/dev/null; exit 1; }
+
+# resolve to a share-relative path (front-proxy only accepts these)
+rel=""
+for d in Downloads Desktop Documents Pictures Music Videos; do
+  case "$f" in
+    "$HOME/$d"/*) rel="$d/${f#"$HOME/$d"/}"; break ;;
+    */$d/*) rel="$d/$(basename "$f")"; break ;;
+  esac
+done
+if [ -z "$rel" ]; then
+  zenity --error --text="Please place the file in Downloads, Desktop or Documents first.
+
+(currently: $f)" 2>/dev/null
+  exit 1
+fi
+enc=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$rel")
+
+out=$(curl -s -m 960 -X POST "http://127.0.0.1:3000/fapi/apk-install?src=$enc")
+if echo "$out" | grep -q '"ok": *true'; then
+  pkg=$(echo "$out" | grep -o '"package": *"[^"]*"' | cut -d'"' -f4)
+  mode=$(echo "$out" | grep -o '"mode": *"[^"]*"' | cut -d'"' -f4)
+  zenity --info --title="Android install" --no-wrap \
+    --text="Installed successfully!
+
+Package: ${pkg:-?}
+Mode: ${mode:-apk}
+Find it in the Android window on your desktop." 2>/dev/null
+else
+  err=$(echo "$out" | grep -o '"detail": *"[^"]*"\|"error": *"[^"]*"' | head -1 | cut -d'"' -f4)
+  zenity --error --title="Android install" --no-wrap \
+    --text="Install failed:
+
+${err:-$out}" 2>/dev/null
+  exit 1
+fi

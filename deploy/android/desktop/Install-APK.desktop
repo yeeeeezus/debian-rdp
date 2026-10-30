@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Install APK
+Comment=Install an Android app (.apk / .xapk) onto the Android environment
+Exec=/usr/local/bin/android-install
+Icon=/usr/local/share/icons/hicolor/256x256/apps/apk-install.png
+Terminal=false
+Categories=Utility;Development;
+StartupNotify=true
