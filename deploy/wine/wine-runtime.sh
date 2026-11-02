@@ -42,7 +42,9 @@ mkdir -p "$DL" 2>/dev/null
 [ -d "$S/usr/bin" ] || { log "FATAL: sysroot not present — run bootstrap first"; exit 1; }
 
 wine_bin() {  # prints the chroot-relative wine binary, or nothing
-  for b in /usr/bin/wine /usr/bin/wine64; do
+  # Debian trixie ships wrapper scripts with a -stable suffix (plain names
+  # are created by update-alternatives postinst, which dpkg -x never runs)
+  for b in /usr/bin/wine /usr/bin/wine-stable /usr/bin/wine64; do
     [ -x "$S$b" ] && { echo "$b"; return 0; }
   done
   return 1
@@ -79,7 +81,7 @@ log "wine binary: $WINE"
 
 # wine version banner (also warms the loader)
 WINEVER=$(env HOME=/home/debian WINEPREFIX="$PREFIX_REL" WINEDEBUG=-all \
-  "$BASE/bin/debian-session" -- "$WINE" --version 2>/dev/null | tail -1)
+  "$BASE/bin/debian-session" "$WINE" --version 2>/dev/null | tail -1)
 log "wine version: ${WINEVER:-unknown}"
 
 # ---------------------------------------------------------- 2. WINEPREFIX
@@ -87,7 +89,7 @@ wenv() {  # run a command inside the sysroot with the wine environment
   env HOME=/home/debian USER=debian LOGNAME=debian \
       WINEPREFIX="$PREFIX_REL" WINEARCH=win64 \
       WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml=" \
-      "$BASE/bin/debian-session" -- "$@"
+      "$BASE/bin/debian-session" "$@"
 }
 
 if [ ! -d "$PREFIX/drive_c" ]; then
@@ -304,11 +306,11 @@ application/x-msi=wine-open.desktop
 EOS
 
 # -- refresh desktop/icon caches inside the chroot
-"$BASE/bin/debian-session" -- /usr/bin/update-desktop-database \
+"$BASE/bin/debian-session" /usr/bin/update-desktop-database \
   /usr/share/applications 2>/dev/null || true
 for d in "$S"/usr/share/icons/*; do
   [ -d "$d" ] || continue
-  "$BASE/bin/debian-session" -- /usr/bin/gtk-update-icon-cache -q -t -f \
+  "$BASE/bin/debian-session" /usr/bin/gtk-update-icon-cache -q -t -f \
     "/usr/share/icons/$(basename "$d")" 2>/dev/null || true
 done
 log "desktop launchers installed (7-Zip, Notepad++, Wine config, Run-EXE)"
@@ -363,7 +365,7 @@ if [ -f "$DS" ] && ! grep -q 'wine runtime' "$DS"; then
   cat >> "$DS" <<'EOS'
 
 # Windows app runtime (Wine, native sysroot packages)
-if [ -x "$BASE/sysroot/usr/bin/wine" ] || [ -x "$BASE/sysroot/usr/bin/wine64" ]; then
+if [ -x "$BASE/sysroot/usr/bin/wine" ] || [ -x "$BASE/sysroot/usr/bin/wine-stable" ] || [ -x "$BASE/sysroot/usr/bin/wine64" ]; then
   ok "wine runtime installed (Windows programs supported)"
 else
   bad "wine runtime not installed"

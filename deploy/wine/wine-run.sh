@@ -21,8 +21,10 @@ S=$BASE/sysroot
 PREFIX=/home/debian/.wine
 
 # ---------------------------------------------------------- wine binary ---
-# Debian: /usr/bin/wine (wrapper) or /usr/bin/wine64
+# Debian trixie: /usr/bin/wine (alternatives), /usr/bin/wine-stable
+# (wrapper), or /usr/lib/wine/wine64 (raw loader)
 WINE=/usr/bin/wine
+[ -x "$S$WINE" ] || WINE=/usr/bin/wine-stable
 [ -x "$S$WINE" ] || WINE=/usr/bin/wine64
 [ -x "$S$WINE" ] || { echo "wine-run: wine not installed in sysroot" >&2; exit 1; }
 
@@ -48,7 +50,7 @@ run_env() {
       WINEDEBUG=-all \
       WINEDLLOVERRIDES="mscoree,mshtml=" \
       LIBGL_ALWAYS_SOFTWARE=1 \
-      "$BASE/bin/debian-session" -- "$@"
+      "$BASE/bin/debian-session" "$@"
 }
 
 # ------------------------------------------------------- single instance --
