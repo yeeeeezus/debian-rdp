@@ -50,6 +50,9 @@ EMU_LAUNCH = ACACHE + '/emulator-launch.sh'
 POSTBOOT = ACACHE + '/android-session.sh'
 APK_HELPER = ACACHE + '/apk-install-helper.py'
 
+# Windows app runtime (Wine, native sysroot packages)
+WINE_RUN = '/home/z/debian/bin/wine-run'
+
 started = time.strftime('%F %T')
 
 
@@ -311,6 +314,69 @@ async def api_apk_install(client, q, method):
         return await send_json(client, {'ok': False, 'error': str(e)}, 500)
 
 
+# --------------------------------------------------------------- wine fapi
+def wine_state():
+    S = '/home/z/debian/sysroot'
+    prefix = S + '/home/debian/.wine'
+    installed = (os.path.isfile(S + '/usr/bin/wine')
+                 or os.path.isfile(S + '/usr/bin/wine64'))
+    return {
+        'installed': installed,
+        'prefix': os.path.isdir(prefix + '/drive_c'),
+        '7zip': os.path.isfile(prefix + '/drive_c/Program Files/7-Zip/7zFM.exe'),
+        'notepadpp': os.path.isfile(
+            prefix + '/drive_c/Program Files/Notepad++/notepad++.exe'),
+        'launcher': os.access(WINE_RUN, os.X_OK),
+    }
+
+
+async def api_wine(client, q):
+    return await send_json(client, wine_state())
+
+
+async def api_wine_app(client, q):
+    """Start a known Windows app (7zip | notepad++ | winecfg) on the desktop."""
+    name = (q.get('name') or [''])[0]
+    if name not in ('7zip', 'notepad++', 'winecfg'):
+        return await send_json(client, {'ok': False, 'error': 'bad app name'}, 400)
+    st = wine_state()
+    if not st['installed'] or not st['launcher']:
+        return await send_json(client, {'ok': False, 'error': 'wine not provisioned'}, 500)
+    need = {'7zip': '7zip', 'notepad++': 'notepadpp'}.get(name)
+    if need and not st[need]:
+        return await send_json(client, {'ok': False, 'error': 'app not installed'}, 409)
+    log('wine app start: %s' % name)
+    subprocess.Popen(['bash', WINE_RUN, name],
+                     stdout=open('/home/z/debian/run/wine-api.log', 'a'),
+                     stderr=subprocess.STDOUT,
+                     stdin=subprocess.DEVNULL,
+                     start_new_session=True)
+    return await send_json(client, {'ok': True, 'started': name})
+
+
+async def api_wine_run(client, q):
+    """Run any Windows executable from the browser-shared home dirs."""
+    src = (q.get('src') or [''])[0]
+    d, _, name = src.partition('/')
+    if safe_dir(d) is None or safe_name(name) is None:
+        return await send_json(client, {'ok': False, 'error': 'bad src'}, 400)
+    full = os.path.join(HOME, d, name)
+    if not os.path.isfile(full):
+        return await send_json(client, {'ok': False, 'error': 'no such file'}, 404)
+    if not name.lower().endswith(('.exe', '.msi', '.bat', '.cmd', '.lnk')):
+        return await send_json(client,
+                               {'ok': False, 'error': 'not a Windows executable'}, 400)
+    if not os.access(WINE_RUN, os.X_OK):
+        return await send_json(client, {'ok': False, 'error': 'wine not provisioned'}, 500)
+    log('wine run: %s/%s' % (d, name))
+    subprocess.Popen(['bash', WINE_RUN, '/home/debian/%s/%s' % (d, name)],
+                     stdout=open('/home/z/debian/run/wine-api.log', 'a'),
+                     stderr=subprocess.STDOUT,
+                     stdin=subprocess.DEVNULL,
+                     start_new_session=True)
+    return await send_json(client, {'ok': True, 'started': name})
+
+
 async def handle_api(client, method, path):
     u = urllib.parse.urlparse(path)
     q = urllib.parse.parse_qs(u.query)
@@ -332,6 +398,12 @@ async def handle_api(client, method, path):
         return await api_android_view(client, q)
     if u.path == '/fapi/apk-install' and method == 'POST':
         return await api_apk_install(client, q, method)
+    if u.path == '/fapi/wine' and method == 'GET':
+        return await api_wine(client, q)
+    if u.path == '/fapi/wine/app' and method == 'POST':
+        return await api_wine_app(client, q)
+    if u.path == '/fapi/wine/run' and method == 'POST':
+        return await api_wine_run(client, q)
     if u.path == '/fapi/download' and method == 'GET':
         return await api_download(client, q)
     return await send_json(client, {'error': 'unknown endpoint'}, 404)

@@ -72,6 +72,8 @@ PKGS=(
   # --- utilities ---
   qbittorrent fastfetch htop p7zip-full zip unzip unrar-free vim nano less
   file curl wget bc rsync bash-completion
+  # --- Windows programs (Wine) ---
+  wine wine64 winetricks
   # --- remote desktop experience ---
   autocutsel xclip tree
 )

@@ -152,6 +152,20 @@ if [ -d deploy/android ]; then
   echo "   provisioning in background: tail -f /home/z/android-runtime.log"
 fi
 
+# -------------------------------------------------- windows app runtime ---
+# Wine (native sysroot packages: wine + wine64 + winetricks are in the
+# gnome-download.sh PKGS list). wine-runtime.sh finishes the setup:
+# WINEPREFIX + 7-Zip + Notepad++ + desktop launchers + .exe file
+# association + front-proxy /fapi/wine endpoints. Background — the
+# desktop is NOT blocked by it.
+if [ -d deploy/wine ]; then
+  echo "-- stage 7: windows app environment (Wine, background)"
+  bootnote wine "Setting up the Windows app environment (Wine, background)"
+  ( setsid nohup bash "$(pwd)/deploy/wine/wine-runtime.sh" \
+      > /home/z/wine-runtime.log 2>&1 < /dev/null & )
+  echo "   provisioning in background: tail -f /home/z/wine-runtime.log"
+fi
+
 echo
 echo "=============================================="
 echo " Bootstrap finished."
