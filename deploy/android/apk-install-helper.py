@@ -20,7 +20,7 @@ import sys
 import tempfile
 import zipfile
 
-ADB_DEFAULT = "/home/z/my-project/.android-cache/sdk/platform-tools/adb"
+ADB_DEFAULT = "/home/z/android-cache/sdk/platform-tools/adb"
 TIMEOUT = 900  # software emulation is slow; installs can take minutes
 
 

@@ -5,7 +5,7 @@
 # is only a race on the very first boot after (re)creation.
 # Uses /proc/<pid> existence tests (no forks) — fork() can transiently
 # fail under extreme memory pressure and must not abort the race.
-C=/home/z/my-project/.android-cache
+C=/home/z/android-cache
 ADB="$C/sdk/platform-tools/adb"
 LOG="$C/avd/gms-disabler.log"
 exec >> "$LOG" 2>&1

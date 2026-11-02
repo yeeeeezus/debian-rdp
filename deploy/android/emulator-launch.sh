@@ -2,7 +2,7 @@
 # Launch the Android emulator window on the desktop X display (:1).
 # Pure software: TCG CPU emulation + host-side SwiftShader GPU (no KVM needed).
 # Single instance: exits 0 politely if already running.
-C=/home/z/my-project/.android-cache
+C=/home/z/android-cache
 export ANDROID_SDK_ROOT="$C/sdk"
 export ANDROID_AVD_HOME="$C/avd"
 export ANDROID_USER_HOME="$C/android-user"
@@ -11,6 +11,8 @@ export DISPLAY="${ANDROID_DISPLAY:-:1}"
 export QT_X11_NO_MITSHM=1
 # the emulator's pre-flight check demands 2 GiB free; this sandbox is tight,
 # so we preload a statvfs shim reporting 64 GiB (disk writes are NOT affected)
+# qemu needs the emulator package's own Qt/tcmalloc libs
+export LD_LIBRARY_PATH="/home/z/android-cache/sdk/emulator/lib64:/home/z/android-cache/sdk/emulator/lib64/qt/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export LD_PRELOAD="$C/dist/statvfs-shim.so"
 PIDF="$C/avd/emulator.pid"
 LOG="$C/avd/emulator-launch.log"

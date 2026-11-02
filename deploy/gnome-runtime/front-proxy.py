@@ -44,7 +44,7 @@ NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._()+,\-]{0,199}\Z")
 CHUNK = 256 * 1024
 
 # Android runtime (userspace emulator under .android-cache, survives resets)
-ACACHE = '/home/z/my-project/.android-cache'
+ACACHE = '/home/z/android-cache'
 ADB = ACACHE + '/sdk/platform-tools/adb'
 EMU_LAUNCH = ACACHE + '/emulator-launch.sh'
 POSTBOOT = ACACHE + '/android-session.sh'
@@ -318,8 +318,8 @@ async def api_apk_install(client, q, method):
 def wine_state():
     S = '/home/z/debian/sysroot'
     prefix = S + '/home/debian/.wine'
-    installed = (os.path.isfile(S + '/usr/bin/wine')
-                 or os.path.isfile(S + '/usr/bin/wine64'))
+    installed = any(os.path.isfile(S + b) for b in
+                    ('/usr/bin/wine', '/usr/bin/wine-stable', '/usr/bin/wine64'))
     return {
         'installed': installed,
         'prefix': os.path.isdir(prefix + '/drive_c'),

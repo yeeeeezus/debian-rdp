@@ -42,16 +42,16 @@ esac
 [ -n "$APP" ] || { echo "wine-run: missing argument" >&2; exit 1; }
 
 # ------------------------------------------------------------- env --------
-run_env() {
-  env HOME=/home/debian USER=debian LOGNAME=debian SHELL=/bin/bash \
-      DISPLAY=:1 LANG=en_US.UTF-8 \
-      XDG_RUNTIME_DIR=/run/user/1001 \
-      WINEPREFIX="$PREFIX" WINEARCH=win64 \
-      WINEDEBUG=-all \
-      WINEDLLOVERRIDES="mscoree,mshtml=" \
-      LIBGL_ALWAYS_SOFTWARE=1 \
-      "$BASE/bin/debian-session" "$@"
-}
+# NOTE: nohup cannot exec a shell FUNCTION — `env` must be the exec'd
+# binary inside the setsid-nohup chain.
+WENV=(env HOME=/home/debian USER=debian LOGNAME=debian SHELL=/bin/bash
+      DISPLAY=:1 LANG=en_US.UTF-8
+      XDG_RUNTIME_DIR=/run/user/1001
+      WINEPREFIX="$PREFIX" WINEARCH=win64
+      WINEDEBUG=-all
+      WINEDLLOVERRIDES="mscoree,mshtml="
+      LIBGL_ALWAYS_SOFTWARE=1
+      "$BASE/bin/debian-session")
 
 # ------------------------------------------------------- single instance --
 tag=""
@@ -68,7 +68,7 @@ mkdir -p "$S/run" 2>/dev/null
 LOG="$BASE/run/wine-$(date +%s).log"
 
 if [ "$APP" = "__WINECFG__" ]; then
-  setsid nohup run_env "$WINE" winecfg.exe \
+  setsid nohup "${WENV[@]}" "$WINE" winecfg.exe \
     > "$LOG" 2>&1 < /dev/null &
 else
   # the exe must exist inside the sysroot (wine resolves chroot paths)
@@ -77,7 +77,7 @@ else
     exit 1
   fi
   [ $# -gt 0 ] && shift
-  setsid nohup run_env "$WINE" "$APP" "$@" \
+  setsid nohup "${WENV[@]}" "$WINE" "$APP" "$@" \
     > "$LOG" 2>&1 < /dev/null &
 fi
 PID=$!

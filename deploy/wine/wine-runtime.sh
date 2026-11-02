@@ -87,6 +87,7 @@ log "wine version: ${WINEVER:-unknown}"
 # ---------------------------------------------------------- 2. WINEPREFIX
 wenv() {  # run a command inside the sysroot with the wine environment
   env HOME=/home/debian USER=debian LOGNAME=debian \
+      XDG_RUNTIME_DIR=/run/user/1001 \
       WINEPREFIX="$PREFIX_REL" WINEARCH=win64 \
       WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml=" \
       "$BASE/bin/debian-session" "$@"
@@ -95,11 +96,28 @@ wenv() {  # run a command inside the sysroot with the wine environment
 if [ ! -d "$PREFIX/drive_c" ]; then
   log "creating WINEPREFIX (win64, ~1 min)"
   mkdir -p "$S/home/debian"
+  # PRE-SEED zlib1.dll: Debian's wine builtins (user32.dll...) import
+  # zlib1.dll, which lives in the libz-mingw-w64 package — NOT on wine's
+  # DLL search path. Without it wineboot dies mid-way (kernel32 c0000135)
+  # and leaves a broken prefix. It must be in system32 BEFORE wineboot.
+  ZSRC=$(ls "$S"/usr/x86_64-w64-mingw32/lib/zlib1.dll 2>/dev/null | head -1)
+  if [ -n "$ZSRC" ]; then
+    mkdir -p "$PREFIX/drive_c/windows/system32"
+    cp -f "$ZSRC" "$PREFIX/drive_c/windows/system32/zlib1.dll"
+    log "pre-seeded zlib1.dll into the new prefix"
+  else
+    log "WARN: /usr/x86_64-w64-mingw32/lib/zlib1.dll missing — prefix may break"
+  fi
   wenv "$WINE" wineboot -i >/dev/null 2>&1
   # wineboot leaves a wineserver running; make it exit to free resources
   wenv "$WINE" wineserver -k 2>/dev/null
 fi
 [ -d "$PREFIX/drive_c" ] || { log "FATAL: WINEPREFIX creation failed"; exit 1; }
+# belt & braces: keep zlib1.dll present even if wineboot re-created system32
+if [ ! -f "$PREFIX/drive_c/windows/system32/zlib1.dll" ]; then
+  ZSRC=$(ls "$S"/usr/x86_64-w64-mingw32/lib/zlib1.dll 2>/dev/null | head -1)
+  [ -n "$ZSRC" ] && cp -f "$ZSRC" "$PREFIX/drive_c/windows/system32/zlib1.dll"
+fi
 log "WINEPREFIX ready: $PREFIX_REL"
 
 # ------------------------------------------------------------- 3. demo apps
@@ -107,8 +125,18 @@ sevenzip_done() { [ -x "$PREFIX/drive_c/Program Files/7-Zip/7zFM.exe" ]; }
 npp_done()      { [ -x "$PREFIX/drive_c/Program Files/Notepad++/notepad++.exe" ]; }
 
 if [ "${WINE_NO_APPS:-0}" != "1" ]; then
+  # GitHub release asset lookup. Authenticated when a token is available
+  # (the anonymous API is rate-limited to 60/h per IP); direct release
+  # URLs are NOT rate-limited, so a hard fallback always works.
+  gh_token() {
+    head -1 /home/z/my-project/storage/gh-token.b64 2>/dev/null | base64 -d 2>/dev/null
+    return 0
+  }
   gh_asset() {  # gh_asset <repo> <name-regex> -> asset browser_download_url
-    curl -s --max-time 25 "https://api.github.com/repos/$1/releases/latest" \
+    local auth=() t
+    t=$(gh_token)
+    [ -n "$t" ] && auth=(-H "Authorization: Bearer $t")
+    curl -s --max-time 25 "${auth[@]}" "https://api.github.com/repos/$1/releases/latest" \
       | python3 -c "
 import json, re, sys
 try:
@@ -121,16 +149,18 @@ except Exception:
   }
 
   if ! sevenzip_done; then
-    log "installing 7-Zip (real Windows app, silent install)"
-    URL=$(gh_asset ip7z/7zip '^7z[0-9]+-x64\.exe$' || true)
-    [ -z "$URL" ] && URL=https://github.com/ip7z/7zip/releases/download/25.01/7z2501-x64.exe
+    log "installing 7-Zip (real Windows app)"
+    # NOTE: the 7z*-x64.exe INSTALLER is 32-bit NSIS -> unusable on wine64.
+    # The MSI installs cleanly via the 64-bit msiexec builtin (/qn = quiet).
+    URL=$(gh_asset ip7z/7zip '^7z[0-9]+-x64\.msi$' || true)
+    [ -z "$URL" ] && URL=https://github.com/ip7z/7zip/releases/download/25.01/7z2501-x64.msi
     F="$DL/$(basename "$URL")"
     if [ ! -s "$F" ]; then curl -sL --retry 3 -o "$F" "$URL" || true; fi
     if [ -s "$F" ]; then
-      # copy into the prefix-visible home so wine sees it via chroot paths
       mkdir -p "$S/home/debian/Downloads"
       cp -f "$F" "$S/home/debian/Downloads/"
-      wenv "$WINE" "/home/debian/Downloads/$(basename "$F")" /S >/dev/null 2>&1
+      wenv "$WINE" msiexec /i "Z:\\home\\debian\\Downloads\\$(basename "$F")" /qn \
+        >/dev/null 2>&1
       wenv "$WINE" wineserver -k 2>/dev/null
       rm -f "$S/home/debian/Downloads/$(basename "$F")"
     fi
@@ -143,33 +173,17 @@ except Exception:
   if ! npp_done; then
     log "installing Notepad++ (portable x64)"
     URL=$(gh_asset notepad-plus-plus/notepad-plus-plus '^npp\..*\.portable\.x64\.zip$' || true)
-    F="$DL/$(basename "${URL:-npp.zip}")"
-    if [ -n "$URL" ] && [ ! -s "$F" ]; then curl -sL --retry 3 -o "$F" "$URL" || true; fi
+    [ -z "$URL" ] && URL=https://github.com/notepad-plus-plus/notepad-plus-plus/releases/download/v8.8.1/npp.8.8.1.portable.x64.zip
+    F="$DL/$(basename "$URL")"
+    if [ ! -s "$F" ]; then curl -sL --retry 3 -o "$F" "$URL" || true; fi
     if [ -s "$F" ]; then
-      # unzip host-side with python (no deps), straight into the prefix
-      python3 - "$F" "$PREFIX/drive_c/Program Files" <<'PY'
+      # portable zip has NO top-level folder: extract straight into place
+      python3 - "$F" "$PREFIX/drive_c/Program Files/Notepad++" <<'PY'
 import sys, zipfile, os
-zf, dest = sys.argv[1], sys.argv[2]
+zf, tgt = sys.argv[1], sys.argv[2]
+os.makedirs(tgt, exist_ok=True)
 with zipfile.ZipFile(zf) as z:
-    names = sorted(z.namelist())
-    tgt = os.path.join(dest, 'Notepad++')
-    os.makedirs(tgt, exist_ok=True)
-    for n in names:
-        if n.endswith('/'):
-            continue
-        rel = n
-        # strip a single top-level folder if the zip is not rooted at Notepad++
-        parts = n.split('/')
-        if parts[0].lower() != 'notepad++':
-            rel = '/'.join(parts[1:])
-        else:
-            rel = '/'.join(parts[1:])
-        if not rel:
-            continue
-        out = os.path.join(tgt, rel)
-        os.makedirs(os.path.dirname(out), exist_ok=True)
-        with open(out, 'wb') as f:
-            f.write(z.read(n))
+    z.extractall(tgt)
 print('notepad++ files:', len(os.listdir(tgt)))
 PY
     fi
@@ -247,6 +261,7 @@ install -m 644 "$ICON_DIR"/wine-*.png \
   "$S/usr/local/share/icons/hicolor/256x256/apps/" 2>/dev/null
 
 # -- desktop launchers
+mkdir -p "$S/usr/local/share/applications"
 cat > "$S/usr/local/share/applications/wine-7zip.desktop" <<'EOS'
 [Desktop Entry]
 Version=1.0

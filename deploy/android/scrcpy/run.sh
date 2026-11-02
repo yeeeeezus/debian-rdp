@@ -1,7 +1,7 @@
 #!/bin/bash
 # scrcpy view of the headless Android emulator, on the desktop X display.
 # Single instance; gentle settings for the software-emulated guest.
-C=/home/z/my-project/.android-cache
+C=/home/z/android-cache
 export DISPLAY="${ANDROID_DISPLAY:-:1}"
 export PATH="$C/sdk/platform-tools:$PATH"
 export LD_LIBRARY_PATH="$C/scrcpy/x/usr/lib/x86_64-linux-gnu"

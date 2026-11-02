@@ -1,6 +1,6 @@
 #!/bin/bash
 # Create the android30 AVD (idempotent) with a desktop-friendly small skin.
-C=/home/z/my-project/.android-cache
+C=/home/z/android-cache
 export JAVA_HOME="$C/jdk/usr/lib/jvm/java-21-openjdk-amd64"
 export PATH="$JAVA_HOME/bin:$PATH"
 export ANDROID_AVD_HOME="$C/avd"

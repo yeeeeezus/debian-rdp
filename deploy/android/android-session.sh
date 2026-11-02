@@ -8,7 +8,7 @@
 #        a. disable GMS (fresh AVDs only; persists in userdata)
 #        b. install every cached APK (HelloTalk) unless already installed
 #   3. wait for full boot completion (status reporting)
-C=/home/z/my-project/.android-cache
+C=/home/z/android-cache
 ADB="$C/sdk/platform-tools/adb"
 LOG="$C/avd/session.log"
 exec >> "$LOG" 2>&1

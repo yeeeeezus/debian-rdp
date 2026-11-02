@@ -4,7 +4,7 @@
 # + HelloTalk) on the cloud Debian desktop.
 #
 # Host-side script (like the other deploy/ scripts). Everything lives under
-# /home/z/my-project/.android-cache (gitignored, but the directory SURVIVES
+# /home/z/android-cache (gitignored, but the directory SURVIVES
 # platform resets), so re-running after a reset is FAST (no re-downloads).
 #
 # What it builds:
@@ -25,7 +25,7 @@
 # Env knobs: ANDROID_NO_START=1  don't launch the emulator at the end
 # ============================================================================
 set -u
-C=/home/z/my-project/.android-cache
+C=/home/z/android-cache
 S=/home/z/debian/sysroot
 HERE=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$C"/{sdk,avd,apks,dist,android-user} "$C"/avd/android30.avd 2>/dev/null
@@ -129,6 +129,16 @@ if ! have_sdk; then
   rm -rf "$C/jdk" "$C/sdk/cmdline-tools" "$C/debs" "$C/tmp" 2>/dev/null
 else
   log "FAST PATH: cached SDK found"
+fi
+
+# ------------------------------------------------ 2b. qemu headless link
+# sdkmanager's emulator package sometimes ships only the full qemu binary
+# (Qt-linked); the launcher looks for the -headless name. Symlink it and
+# let emulator-launch.sh feed LD_LIBRARY_PATH the bundled Qt/tcmalloc libs.
+QDIR="$C/sdk/emulator/qemu/linux-x86_64"
+if [ -f "$QDIR/qemu-system-x86_64" ] && [ ! -e "$QDIR/qemu-system-x86_64-headless" ]; then
+  ln -sf qemu-system-x86_64 "$QDIR/qemu-system-x86_64-headless"
+  log "linked qemu-system-x86_64-headless -> qemu-system-x86_64"
 fi
 
 # ------------------------------------------------------ 3. statvfs shim
