@@ -19,9 +19,19 @@ mkdir -p "$DEBS/partial" "$LISTS/partial" "$BASE/sysroot" "$BASE/logs"
 : > "$EMPTY_STATUS"
 
 echo "[$(date +%T)] Refreshing user-owned apt lists..."
+
+# winetricks (and wine) live in Debian *contrib*; the sandbox's own sources
+# only enable *main*. Generate a user-owned sources file with contrib enabled.
+CONTRIB_SOURCES=$BASE/debian-contrib.sources
+if [ ! -f "$CONTRIB_SOURCES" ]; then
+  sed 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
+    /etc/apt/sources.list.d/debian.sources > "$CONTRIB_SOURCES" 2>/dev/null \
+    || cp /etc/apt/sources.list.d/debian.sources "$CONTRIB_SOURCES"
+fi
+
 apt-get -o Debug::NoLocking=1 \
   -o Dir::State::lists="$LISTS" \
-  -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/debian.sources \
+  -o Dir::Etc::sourcelist="$CONTRIB_SOURCES" \
   -o Dir::Etc::sourceparts=/nonexistent \
   -o Dir::Cache="$LISTS" \
   -o APT::Get::List-Cleanup=0 \
@@ -84,6 +94,8 @@ for attempt in 1 2 3 4 5; do
   OUT=$(apt-get install --download-only -y \
     -o Debug::NoLocking=1 \
     -o Dir::State::lists="$LISTS" \
+    -o Dir::Etc::sourcelist="$CONTRIB_SOURCES" \
+    -o Dir::Etc::sourceparts=/nonexistent \
     -o Dir::State::status="$EMPTY_STATUS" \
     -o Dir::Cache::archives="$DEBS" \
     -o APT::Install-Recommends=false \
