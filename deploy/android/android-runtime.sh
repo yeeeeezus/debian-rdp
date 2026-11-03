@@ -36,7 +36,8 @@ log() { echo "[android-runtime] $*"; }
 log "installing host scripts into $C"
 for f in emulator-launch.sh avd-create.sh sdk-install.sh \
          apk-install-helper.py oom-shepherd.sh gms-disabler.sh \
-         android-session.sh statvfs-shim.c; do
+         android-session.sh statvfs-shim.c \
+         fetch-zip-big.py fetch-zip-member.py swap-emulator-build.py; do
   [ -f "$HERE/$f" ] && cp "$HERE/$f" "$C/" && chmod +x "$C/$f" 2>/dev/null
 done
 # keep the cached shim binary if present (gcc may be needed to rebuild it)
@@ -131,7 +132,77 @@ else
   log "FAST PATH: cached SDK found"
 fi
 
-# ------------------------------------------------ 2b. qemu headless link
+# --------------------------------------------- 2a. system image integrity
+# sdkmanager installs can TRUNCATE system.img on disk-full (observed Nov 2:
+# 3.2GB image cut at 2.14GB -> kernel rejects GPT -> "partition(s) not
+# found: super, vbmeta" -> init abort bootloop). Verify + repair via the
+# HTTP-Range stream extractor; then re-write VerifiedBootParams.textproto
+# with the TRUE digest: sha256(root vbmeta 4480B || the chained 1664B
+# vbmeta inside super). A stale/wrong digest in the textproto makes
+# first-stage init abort with "vbmeta digest mismatch".
+IMG="$IMGDIR/system.img"
+img_gpt_ok() {
+  python3 - "$1" <<'PY'
+import struct, sys, os
+try:
+    f = open(sys.argv[1], 'rb'); f.seek(512)
+    last_lba, = struct.unpack('<Q', f.read(92)[32:40])
+    print('ok' if (last_lba+1)*512 <= os.path.getsize(sys.argv[1]) else 'bad')
+except Exception:
+    print('bad')
+PY
+}
+if [ ! -f "$IMG" ] || [ "$(img_gpt_ok "$IMG")" != "ok" ]; then
+  log "system.img missing/truncated — stream-extracting a byte-perfect copy (r11)"
+  python3 "$HERE/fetch-zip-big.py" \
+    https://dl.google.com/android/repository/sys-img/google_apis/x86_64-30_r11.zip \
+    system.img "$IMG" || log "WARN: image re-fetch failed"
+fi
+log "repairing VerifiedBootParams.textproto digest"
+python3 - "$IMGDIR" <<'PY'
+import hashlib, os, struct, sys
+d = sys.argv[1]
+img = os.path.join(d, 'system.img')
+try:
+    f = open(img, 'rb')
+    f.seek(2048*512)
+    root = f.read(4480)
+    if root[:4] != b'AVB0':
+        raise ValueError('no root vbmeta')
+    # the chained vbmeta inside super: the unique 1664-byte AVB0
+    f.seek(2097152)
+    second = None
+    pos = 2097152
+    while pos < 6311935*512 and second is None:
+        f.seek(pos)
+        chunk = f.read(32*1024*1024)
+        if not chunk: break
+        idx = chunk.find(b'AVB0')
+        while idx != -1:
+            if idx + 28 <= len(chunk):
+                auth, aux = struct.unpack('>QQ', chunk[idx+12:idx+28])
+                if 256 + auth + aux == 1664:
+                    f.seek(pos + idx)
+                    second = f.read(1664)
+                    break
+            idx = chunk.find(b'AVB0', idx + 4)
+        pos += len(chunk) - 4096
+    digest = hashlib.sha256(root + second).hexdigest() if second else \
+             hashlib.sha256(root).hexdigest()
+    tp = os.path.join(d, 'VerifiedBootParams.textproto')
+    size = 4480 + (len(second) if second else 0)
+    with open(tp, 'w') as out:
+        out.write('# repaired by android-runtime.sh\n')
+        out.write('major_version: 2\n')
+        out.write(f'param: "androidboot.vbmeta.size={size}"\n')
+        out.write('param: "androidboot.vbmeta.hash_alg=sha256"\n')
+        out.write(f'param: "androidboot.vbmeta.digest={digest}"\n')
+    print(f'textproto: size={size} digest={digest[:16]}...')
+except Exception as e:
+    print('WARN: digest repair failed:', e)
+PY
+
+# --------------------------------------------- 2b. qemu headless link
 # sdkmanager's emulator package sometimes ships only the full qemu binary
 # (Qt-linked); the launcher looks for the -headless name. Symlink it and
 # let emulator-launch.sh feed LD_LIBRARY_PATH the bundled Qt/tcmalloc libs.
