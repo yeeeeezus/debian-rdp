@@ -9,6 +9,8 @@ export ANDROID_USER_HOME="$C/android-user"
 export ANDROID_PREFS_ROOT="$C/android-user"
 export DISPLAY="${ANDROID_DISPLAY:-:1}"
 export QT_X11_NO_MITSHM=1
+# emulator 37.3+ refuses -accel off without this opt-in
+export ANDROID_I_WANT_MY_TCG=yes
 # the emulator's pre-flight check demands 2 GiB free; this sandbox is tight,
 # so we preload a statvfs shim reporting 64 GiB (disk writes are NOT affected)
 # qemu needs the emulator package's own Qt/tcmalloc libs
