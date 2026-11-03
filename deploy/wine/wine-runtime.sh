@@ -53,7 +53,19 @@ wine_bin() {  # prints the chroot-relative wine binary, or nothing
 # ------------------------------------------------- 1. wine present? (self-heal)
 WINE=$(wine_bin || true)
 if [ -z "$WINE" ]; then
-  log "wine missing from sysroot — downloading the closure (self-heal)"
+  # DISK GATE: the wine closure is ~1.5 GB of debs. Downloading it on a
+  # nearly-full disk ENOSPC-truncates files being written by OTHER
+  # processes (on 2026-11-02 this hollowed 186 sysroot files: python3.13,
+  # Xtigervnc, dozens of X11 libs). Skip rather than corrupt.
+  FREE_MB=$(df -Pm / | awk 'NR==2{print $4}')
+  if [ "$FREE_MB" -lt 2500 ]; then
+    log "WARN: only ${FREE_MB}MB free (<2500MB) - SKIPPING wine closure download"
+    log "      to protect the sysroot from ENOSPC truncation. Wine is optional;"
+    log "      this self-heal will retry on the next boot once space is freed."
+    exit 0
+  fi
+  log "wine missing from sysroot - downloading the closure (self-heal, ${FREE_MB}MB free)"
+  BEFORE_DEBS=$(ls "$DEBS" 2>/dev/null | sort)
   mkdir -p "$DEBS/partial"
   : > "$EMPTY_STATUS" 2>/dev/null
   apt-get -o Debug::NoLocking=1 \
@@ -74,6 +86,9 @@ if [ -z "$WINE" ]; then
   for f in "$DEBS"/wine*.deb "$DEBS"/libwine*.deb "$DEBS"/winetricks*.deb; do
     [ -f "$f" ] && dpkg -x "$f" "$S" 2>/dev/null
   done
+  # cleanup: delete the debs this run downloaded (re-downloadable; ~1.5 GB)
+  comm -13 "$BEFORE_DEBS" <(ls "$DEBS" 2>/dev/null | sort) | \
+    while read -r f; do rm -f "$DEBS/$f"; done
   WINE=$(wine_bin || true)
 fi
 [ -n "$WINE" ] || { log "FATAL: wine could not be installed"; exit 1; }
@@ -120,6 +135,17 @@ if [ ! -f "$PREFIX/drive_c/windows/system32/zlib1.dll" ]; then
 fi
 log "WINEPREFIX ready: $PREFIX_REL"
 
+# ------------------------------------------------- 2b. dedup prefix builtins
+# Debian's win64 prefix COPIES ~700 MB of builtin DLLs from the wine lib
+# tree. On this 10 GB sandbox that copy is pure waste: replace identical
+# files with RELATIVE symlinks (resolve under fakechroot AND real chroot).
+# Idempotent; skips files wineboot generated (no lib-tree counterpart).
+if python3 "$HERE/prefix-dedup.py" >> /home/z/debian/run/wine-dedup.log 2>&1; then
+  log "prefix builtins deduplicated (relative symlinks)"
+else
+  log "WARN: prefix dedup failed (non-fatal, prefix keeps full copies)"
+fi
+
 # ------------------------------------------------------------- 3. demo apps
 sevenzip_done() { [ -x "$PREFIX/drive_c/Program Files/7-Zip/7zFM.exe" ]; }
 npp_done()      { [ -x "$PREFIX/drive_c/Program Files/Notepad++/notepad++.exe" ]; }
@@ -162,8 +188,32 @@ except Exception:
       wenv "$WINE" msiexec /i "Z:\\home\\debian\\Downloads\\$(basename "$F")" /qn \
         >/dev/null 2>&1
       wenv "$WINE" wineserver -k 2>/dev/null
-      rm -f "$S/home/debian/Downloads/$(basename "$F")"
     fi
+    # FALLBACK: wine's msiexec silently no-ops on current 7-Zip MSIs. The
+    # Linux 7zz binary reads MSI/CAB (incl. LZX) natively - extract the
+    # payload straight into the prefix (verified 2026-11-03, wine 10.0).
+    if ! sevenzip_done && [ -s "$F" ]; then
+      log "msiexec path failed - extracting MSI payload with Linux 7zz"
+      Z7=$DL/7zz
+      if [ ! -x "$Z7" ]; then
+        ZURL=$(gh_asset ip7z/7zip '^7z[0-9]+-linux-x64\.tar\.xz$' || true)
+        [ -z "$ZURL" ] && ZURL=https://github.com/ip7z/7zip/releases/download/25.01/7z2501-linux-x64.tar.xz
+        curl -sL --retry 3 -o "$DL/7zz.tar.xz" "$ZURL" \
+          && tar -xf "$DL/7zz.tar.xz" -C "$DL" 7zz && chmod +x "$Z7"
+      fi
+      if [ -x "$Z7" ]; then
+        T="$PREFIX/drive_c/Program Files/7-Zip"
+        mkdir -p "$T"
+        "$Z7" x -y "$F" -o"$T" >/dev/null 2>&1
+        # MSI flat extraction mangles 8.3-ambiguous names (_7zFM.exe); the
+        # leading '_' replaced the real first char ('7' for 7-Zip files)
+        ( cd "$T" && for f in _7z*; do [ -f "$f" ] && mv -f "$f" "7${f#_}"; done \
+                             && [ -f _7zip.dll ]   && mv -f _7zip.dll   7-zip.dll \
+                             && [ -f _7zip.chm ]   && mv -f _7zip.chm   7-zip.chm \
+                             && chmod +x *.exe *.dll 2>/dev/null || true )
+      fi
+    fi
+    rm -f "$S/home/debian/Downloads/$(basename "$F")" 2>/dev/null
     sevenzip_done && log "7-Zip installed: $(basename "$URL")" \
                      || log "WARN: 7-Zip install failed"
   else
@@ -184,6 +234,12 @@ zf, tgt = sys.argv[1], sys.argv[2]
 os.makedirs(tgt, exist_ok=True)
 with zipfile.ZipFile(zf) as z:
     z.extractall(tgt)
+# zipfile drops the exec bit; the runtime's [ -x notepad++.exe ] check
+# (and users' muscle memory) expect it set
+for root, _, files in os.walk(tgt):
+    for fn in files:
+        if fn.lower().endswith(('.exe', '.dll')):
+            os.chmod(os.path.join(root, fn), 0o755)
 print('notepad++ files:', len(os.listdir(tgt)))
 PY
     fi
