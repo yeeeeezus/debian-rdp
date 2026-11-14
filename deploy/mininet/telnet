@@ -11,11 +11,26 @@ exits - exactly what the probe needs. Installed in /usr/local/bin (ahead of
 import socket
 import sys
 
-if len(sys.argv) < 3:
-    print("usage: telnet host port")
+args = sys.argv[1:]
+# mininet probes with:  echo A | telnet -e A <server> <port>
+# skip option flags (each -x consumes the following value)
+positional = []
+i = 0
+while i < len(args):
+    a = args[i]
+    if a == '-' or not a.startswith('-'):
+        positional.append(a)
+        i += 1
+    elif a in ('-e', '-l', '-S', '-s', '-k', '-K', '-L', '-R', '-X'):
+        i += 2          # flag with its value (e.g. -e A)
+    else:
+        i += 1          # boolean flags like -8, -4, -6, -a, -d, -E, -N
+
+if len(positional) < 2:
+    print("usage: telnet [-e esc] host port")
     sys.exit(2)
 
-host, port = sys.argv[1], sys.argv[2]
+host, port = positional[0], positional[1]
 try:
     port = int(port)
 except ValueError:
