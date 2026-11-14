@@ -24,7 +24,10 @@ class LxBr(Switch):
     def start(self, controllers):
         self.cmd('ip link add name', self, 'type bridge 2>/dev/null || true')
         if self.stp:
-            self.cmd('ip link set dev', self, 'type bridge stp_state 1')
+            # forward_delay 0: skip the 30 s LISTENING/LEARNING phases so
+            # pingall works right after net.start(); STP still blocks loops.
+            self.cmd('ip link set dev', self, 'type bridge stp_state 1',
+                     'forward_delay 0')
         self.cmd('ip link set dev', self, 'up')
         for intf in self.intfList():
             if intf.name != self.name:
