@@ -80,9 +80,9 @@ for f in session-inner gnome-start gnome-polish; do
 done
 # mininet lab (userns + linux-bridge switch)
 mkdir -p $S/usr/local/lib/mininet-lab
-cp "$DEPLOY"/mininet/mn "$DEPLOY"/mininet/mnexec "$DEPLOY"/mininet/mininet-lab $S/usr/local/bin/ 2>/dev/null
+cp "$DEPLOY"/mininet/mn "$DEPLOY"/mininet/mnexec "$DEPLOY"/mininet/mininet-lab "$DEPLOY"/mininet/telnet $S/usr/local/bin/ 2>/dev/null
 cp "$DEPLOY"/mininet/lxbr.py "$DEPLOY"/mininet/labrc $S/usr/local/lib/mininet-lab/ 2>/dev/null
-chmod +x $S/usr/local/bin/{mn,mnexec,mininet-lab} 2>/dev/null
+chmod +x $S/usr/local/bin/{mn,mnexec,mininet-lab,telnet} 2>/dev/null
 
 echo "== 5. noVNC perfect-fit page =="
 cp "$DEPLOY/gnome-runtime/novnc-index.html" $S/usr/share/novnc/index.html

@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+"""telnet port-probe shim for Mininet's waitListening().
+
+Mininet's `mn --test iperf` probes the iperf server port with
+`telnet <server> <port>` and looks for "Connected to" in the output. The real
+inetutils-telnet stays attached (blocking on stdin) after connecting, so
+mininet waits forever. This shim connects, prints the expected line and
+exits - exactly what the probe needs. Installed in /usr/local/bin (ahead of
+/usr/bin on PATH) by gnome-setup.sh.
+"""
+import socket
+import sys
+
+if len(sys.argv) < 3:
+    print("usage: telnet host port")
+    sys.exit(2)
+
+host, port = sys.argv[1], sys.argv[2]
+try:
+    port = int(port)
+except ValueError:
+    print(f"telnet: bad port {port}")
+    sys.exit(1)
+
+try:
+    s = socket.create_connection((host, port), timeout=2)
+except OSError as e:
+    print(f"Trying {host}...")
+    print(f"telnet: Unable to connect to remote host: {e}")
+    sys.exit(1)
+
+print(f"Trying {host}...")
+print(f"Connected to {host}.")
+print("Escape character is '^]'.")
+s.close()
+sys.exit(0)
