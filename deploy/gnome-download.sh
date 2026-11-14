@@ -76,9 +76,9 @@ PKGS=(
   # --- graphics ---
   gimp
   # --- network lab ---
-  mininet wireshark nmap iperf3 tcpdump net-tools iputils-ping ethtool
+  mininet wireshark nmap iperf3 iperf telnet tcpdump net-tools iputils-ping ethtool
   # --- development ---
-  build-essential cmake git python3-pip python3-venv python3-tk
+  build-essential cmake git python3-pip python3-venv python3-tk python3-matplotlib
   # --- utilities ---
   qbittorrent fastfetch htop p7zip-full zip unzip unrar-free vim nano less
   file curl wget bc rsync bash-completion
