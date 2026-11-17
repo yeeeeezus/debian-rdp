@@ -45,7 +45,7 @@ BOOTPAGE=/home/z/debian/bootpage
 mkdir -p "$BOOTPAGE"
 cp deploy/gnome-runtime/novnc-index.html "$BOOTPAGE/index.html"
 cp deploy/assets/debian-swirl.svg deploy/assets/favicon-32.png \
-   deploy/assets/favicon-64.png deploy/assets/apple-touch-icon.png "$BOOTPAGE/"
+   deploy/assets/favicon-64.png deploy/assets/apple-touch-icon.png deploy/assets/debian-192.png deploy/assets/debian-512.png deploy/assets/debian-maskable-192.png deploy/assets/debian-maskable-512.png deploy/assets/manifest.webmanifest "$BOOTPAGE/"
 bootnote() {  # bootnote <stage> <note>
   printf '{"stage":"%s","note":"%s"}' "$1" "$2" > "$BOOTPAGE/status.json"
 }
