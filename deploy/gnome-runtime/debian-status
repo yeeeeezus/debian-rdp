@@ -71,13 +71,6 @@ if [ -d /home/z/rdp-workspace/.git ]; then
   echo "     repo: $C commits, remote configured: $U"
 fi
 
-# Android runtime (userspace emulator)
-if curl -s -m 5 http://127.0.0.1:3000/fapi/android 2>/dev/null | grep -q '"provisioned": *true'; then
-  RUN=$(curl -s -m 5 http://127.0.0.1:3000/fapi/android 2>/dev/null | grep -o '"running": *[a-z]*' | head -1 | grep -o 'true\|false')
-  ok "android runtime provisioned (emulator ${RUN:-unknown})"
-else
-  bad "android runtime not reachable via front-proxy"
-fi
 
 # system resources
 echo "---"

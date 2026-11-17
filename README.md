@@ -29,8 +29,8 @@ bash bootstrap.sh <THE-GITHUB-TOKEN>
 /home/z/debian/bin/debian-status
 ```
 
-`bootstrap.sh` handles everything end-to-end. What it does, in order
-(each stage is also runnable alone from `deploy/`):
+`bootstrap.sh` handles everything end-to-end (~6-10 min). What it does, in
+order (each stage is also runnable alone from `deploy/`):
 
 1. Authenticates the token, clones the **private data repo**
    (`rdp-data`) — user files, VAULT (tokens), VNC password.
@@ -74,6 +74,16 @@ websockify serves noVNC on **0.0.0.0:3000**; the z.ai web preview proxies
 **:81 → :3000 → VNC :5901**. The page auto-connects with the VNC password,
 fits ANY screen perfectly (dynamic RFB resize follows the browser window
 1:1 — phones too) and auto-reconnects.
+
+### Original Debian icons — everywhere
+
+* **Web / webapp**: the page ships the official Debian swirl (`debian-swirl.svg`,
+  favicon 32/64, apple-touch 180) **plus a PWA manifest** with 192/512 and
+  maskable icons rendered from the same swirl — "Add to Home Screen /
+  Install app" pins the real Debian logo.
+* **Desktop**: launchers use real brand icons — GitHub, Telegram, Hugging
+  Face (rendered from the canonical Simple Icons set), Mininet lab icon,
+  and stock GNOME/Firefox/LibreOffice icons. No placeholder letters.
 
 ### Continuous backup
 
@@ -120,35 +130,8 @@ To move to a new session: open a new chat and tell the agent:
 
 Official Debian 13 GNOME 48 (Adwaita, ceratopsian wallpaper, top bar +
 Activities overview + dock), Firefox ESR, LibreOffice, Thunderbird, VLC,
-GIMP, Remmina (for the Windows RDP container), Telegram Web launcher,
+GIMP, Remmina, Telegram Web launcher,
 GitHub + Hugging Face launchers, terminal helpers (`vault`, `tg-send`,
 `hf-test`, `gh-me`), Mininet SDN lab (userns + Linux bridges), Wireshark,
 nmap, qbittorrent, FileZilla, GCC/Python, and more.
 
-## Android app environment (APK sideloading + HelloTalk)
-
-The desktop ships a **full Android 11 runtime** — you can install and run
-any Android app (`.apk` / `.xapk`), exactly like on a phone:
-
-* **Android** desktop icon — starts the Android window (also a phone
-  button in the web toolbar). Boots automatically after login.
-* **Install APK** desktop icon — pick an `.apk`/`.xapk` and it installs
-  into Android (or drop the file via the browser **Files** drawer, then
-  use the icon). Terminal: `android-install <file>`.
-* **HelloTalk** is preinstalled automatically after each boot (latest
-  version, fetched from APKPure; cached in `.android-cache/apks`).
-* `android-status` in a terminal shows emulator/boot/install state.
-
-Under the hood (no KVM/binder in this sandbox, so everything is
-userspace): SDK emulator 37 on **TCG software CPU emulation** +
-**SwiftShader** host-side GPU rendering, `google_apis` x86_64 image
-(Google services + ARM translation for arm64-only APKs), 360x720 @240dpi
-window. Provisioning is `deploy/android/android-runtime.sh` — cached
-under `my-project/.android-cache` (survives resets, gitignored), so
-post-reset rebuilds take ~1 minute. Quirks we solve: the emulator's
-2 GiB-free-disk pre-flight check (statvfs LD_PRELOAD shim) and OOM
-pressure on the 4 GB box (`oom-shepherd` marks auto-reviving services as
-preferred victims; guest runs with `ro.config.low_ram=true`).
-
-Expectations: first boot ~5–10 min (software emulation), UI is usable
-for chat-style apps but not gaming-class smooth.

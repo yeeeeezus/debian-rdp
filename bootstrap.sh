@@ -140,37 +140,10 @@ sleep 30
 /home/z/debian/bin/debian-status
 bootnote ready "Boot complete — starting session"
 
-# --------------------------------------------------- android app runtime ---
-# APK sideloading environment + HelloTalk. Runs in the background (the SDK
-# is cached in my-project/.android-cache, so this is fast after resets;
-# a first-ever run downloads ~2.3 GB). The desktop is NOT blocked by it.
-if [ -d deploy/android ]; then
-  echo "-- stage 6: android app environment (background)"
-  bootnote android "Setting up the Android app environment (background)"
-  ( setsid nohup env ANDROID_NO_START=0 bash "$(pwd)/deploy/android/android-runtime.sh" \
-      > /home/z/android-runtime.log 2>&1 < /dev/null & )
-  echo "   provisioning in background: tail -f /home/z/android-runtime.log"
-fi
-
-# -------------------------------------------------- windows app runtime ---
-# Wine (native sysroot packages: wine + wine64 + winetricks are in the
-# gnome-download.sh PKGS list). wine-runtime.sh finishes the setup:
-# WINEPREFIX + 7-Zip + Notepad++ + desktop launchers + .exe file
-# association + front-proxy /fapi/wine endpoints. Background — the
-# desktop is NOT blocked by it.
-if [ -d deploy/wine ]; then
-  echo "-- stage 7: windows app environment (Wine, background)"
-  bootnote wine "Setting up the Windows app environment (Wine, background)"
-  ( setsid nohup bash "$(pwd)/deploy/wine/wine-runtime.sh" \
-      > /home/z/wine-runtime.log 2>&1 < /dev/null & )
-  echo "   provisioning in background: tail -f /home/z/wine-runtime.log"
-fi
-
 echo
 echo "=============================================="
 echo " Bootstrap finished."
 echo " Preview : your z.ai web preview link (:81 -> :3000)"
 echo " Password: in rdp-data/vnc/credentials.txt (same as always)"
 echo " Saving  : every change auto-committed to $GH_USER/rdp-data"
-echo " Android : APK installs via desktop 'Install APK' or ~/Downloads"
 echo "=============================================="

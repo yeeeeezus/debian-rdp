@@ -161,34 +161,28 @@ webapp github.desktop        "GitHub"        "https://github.com"        github-
 webapp huggingface.desktop   "Hugging Face"  "https://huggingface.co"    huggingface-web
 
 # ---------------------------------------------------------------------------
-# 4. custom icons (PIL, host-side)
+# 4. brand icons (real logos from deploy/assets)
 # ---------------------------------------------------------------------------
-python3 - << 'PYEOF'
-from PIL import Image, ImageDraw, ImageFont
-import os
+python3 - << 'PYEOF2'
+import os, shutil
 S = "/home/z/debian/sysroot"
-icondir = f"{S}/usr/share/icons/hicolor/256x256/apps"
-os.makedirs(icondir, exist_ok=True)
-try:
-    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 130)
-except Exception:
-    font = ImageFont.load_default()
-
-def make(name, bg, letter, fg=(255,255,255)):
-    img = Image.new("RGBA", (256, 256), (0,0,0,0))
-    d = ImageDraw.Draw(img)
-    d.rounded_rectangle([8,8,248,248], radius=56, fill=bg)
-    d.rounded_rectangle([8,8,248,248], radius=56, outline=(255,255,255,60), width=4)
-    bbox = d.textbbox((0,0), letter, font=font)
-    w, h = bbox[2]-bbox[0], bbox[3]-bbox[1]
-    d.text(((256-w)/2 - bbox[0], (256-h)/2 - bbox[1]), letter, font=font, fill=fg)
-    img.save(f"{icondir}/{name}.png")
-    print("icon:", name)
-
-make("telegram-web",  (38,160,218), "T")
-make("github-web",    (30,32,38),   "GH", (240,246,252))
-make("huggingface-web",(255,224,120), "HF", (40,40,48))
-PYEOF
+DEPLOY = "/home/z/debian-rdp/deploy"
+for d in ("256x256", "512x512"):
+    icondir = f"{S}/usr/share/icons/hicolor/{d}/apps"
+    os.makedirs(icondir, exist_ok=True)
+    for name in ("github-web", "telegram-web", "huggingface-web", "mininet-lab"):
+        src = f"{DEPLOY}/assets/{name}.png" if d == "256x256" else \
+              (f"{DEPLOY}/assets/{name}-512.png" if os.path.exists(f"{DEPLOY}/assets/{name}-512.png")
+               else f"{DEPLOY}/assets/{name}.png")
+        if os.path.exists(src):
+            shutil.copy(src, f"{icondir}/{name}.png")
+            print("icon:", d, name)
+# no stale icon caches - GNOME rescans and picks up the new icons
+for root, _, files in os.walk(f"{S}/usr/share/icons"):
+    for f in files:
+        if f == ".icon-theme.cache":
+            os.remove(os.path.join(root, f))
+PYEOF2
 
 # ---------------------------------------------------------------------------
 # 5. START-HERE guide
@@ -222,7 +216,6 @@ The agent will rebuild this entire desktop from the repo in ~10 minutes.
 - **GitHub**: `gh-me`
 - **Mininet SDN lab**: double-click the Mininet icon (runs in a
   user+network namespace with Linux bridges)
-- **Windows RDP**: use Remmina to reach your Windows container
 - **REA reverse-engineering**: reference docs in VAULT/REA-SKILL
   (full Ghidra toolchain lives in the Z.ai host environment - just ask
   the agent in chat)

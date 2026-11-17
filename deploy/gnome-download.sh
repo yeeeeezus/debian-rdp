@@ -20,8 +20,9 @@ mkdir -p "$DEBS/partial" "$LISTS/partial" "$BASE/sysroot" "$BASE/logs"
 
 echo "[$(date +%T)] Refreshing user-owned apt lists..."
 
-# winetricks (and wine) live in Debian *contrib*; the sandbox's own sources
-# only enable *main*. Generate a user-owned sources file with contrib enabled.
+# some packages (codecs etc.) live outside Debian *main*; the sandbox's own
+# sources only enable *main*. Generate a user-owned sources file with contrib
+# + non-free enabled (harmless for main-only installs).
 CONTRIB_SOURCES=$BASE/debian-contrib.sources
 if [ ! -f "$CONTRIB_SOURCES" ]; then
   sed 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
@@ -82,8 +83,7 @@ PKGS=(
   # --- utilities ---
   qbittorrent fastfetch htop p7zip-full zip unzip unrar-free vim nano less
   file curl wget bc rsync bash-completion
-  # --- Windows programs (Wine) ---
-  wine wine64 winetricks
+
   # --- remote desktop experience ---
   autocutsel xclip tree
 )
