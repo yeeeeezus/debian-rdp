@@ -83,6 +83,8 @@ mkdir -p $S/usr/local/lib/mininet-lab
 cp "$DEPLOY"/mininet/mn "$DEPLOY"/mininet/mnexec "$DEPLOY"/mininet/mininet-lab "$DEPLOY"/mininet/telnet $S/usr/local/bin/ 2>/dev/null
 cp "$DEPLOY"/mininet/lxbr.py "$DEPLOY"/mininet/labrc $S/usr/local/lib/mininet-lab/ 2>/dev/null
 chmod +x $S/usr/local/bin/{mn,mnexec,mininet-lab,telnet} 2>/dev/null
+# SDN controller (ryu) + lecture compat + lecture scripts
+bash "$DEPLOY"/mininet/install-sdnc.sh || echo "(sdnc install failed - lab still works without ryu)"
 
 echo "== 5. noVNC perfect-fit page =="
 cp "$DEPLOY/gnome-runtime/novnc-index.html" $S/usr/share/novnc/index.html

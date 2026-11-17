@@ -5,3 +5,8 @@ export PS1='\[\e[1;32m\]mn-lab\[\e[0m\]:\w\$ '
 cd /home/debian 2>/dev/null
 alias ll='ls -alF'
 alias ls='ls --color=auto'
+
+# lecture compatibility: OVSSwitch->LxBr, RemoteController->stub (auto via
+# sitecustomize), and the ryu SDN controller is available as ryu-manager.
+export PYTHONPATH=/usr/local/lib/mininet-lab
+

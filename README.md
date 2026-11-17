@@ -126,6 +126,17 @@ To move to a new session: open a new chat and tell the agent:
 - `rdp-data` is private and holds your VAULT (tokens). **Keep it private.**
 - If a token ever leaks, rotate it and update the vault.
 
+## Ryu SDN controller + lecture scripts
+
+`deploy/mininet/install-sdnc.sh` (called by `gnome-setup.sh`) installs
+**ryu 4.34 + deps** (packed in `deploy/mininet/py-sdnc/`), `ryu-manager`
+(listens on 6653), and the **lecture example scripts** (example01…13,
+delay/throughput labs) into `~/mininet-labs`. A `lecture_compat.py`
+sitecustomize maps `OVSSwitch`→Linux-bridge and `RemoteController`→stub
+automatically, plus a userspace loop-guard for ring topologies (kernel STP
+cannot run in a user namespace). Verified: all 10 lecture scripts pass
+(pingall 0% loss, link up/down, iperf3, RTT measurements).
+
 ## What's inside the desktop
 
 Official Debian 13 GNOME 48 (Adwaita, ceratopsian wallpaper, top bar +
