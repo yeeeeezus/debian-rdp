@@ -89,6 +89,9 @@ cp "$DEPLOY/gnome-runtime/novnc-index.html" $S/usr/share/novnc/index.html
 # official Debian swirl: favicon + apple-touch + boot-screen logo
 cp "$DEPLOY/assets/debian-swirl.svg" "$DEPLOY/assets/favicon-32.png" \
    "$DEPLOY/assets/favicon-64.png" "$DEPLOY/assets/apple-touch-icon.png" \
+   "$DEPLOY/assets/debian-192.png" "$DEPLOY/assets/debian-512.png" \
+   "$DEPLOY/assets/debian-maskable-192.png" "$DEPLOY/assets/debian-maskable-512.png" \
+   "$DEPLOY/assets/manifest.webmanifest" \
    $S/usr/share/novnc/
 
 echo "== 6. home skeleton + Firefox tuned profile + VNC password =="
